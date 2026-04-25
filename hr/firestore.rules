@@ -1,0 +1,28 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /applications/{applicationId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /anomalies/{anomalyId} {
+      allow read: if true;
+      allow create: if true;
+    }
+
+    function isValidApplication(data) {
+      return data.candidateName is string && 
+             data.candidateName.size() <= 100 &&
+             data.position is string &&
+             data.status in ['pending', 'reviewing', 'shortlisted', 'rejected', 'hired'] &&
+             (data.createdAt is timestamp || data.createdAt == null);
+    }
+
+    function isValidAnomaly(data) {
+      return data.applicationId is string &&
+             data.type in ['DELAY', 'SPEED', 'CONTRARY_SELECTION'] &&
+             (data.timestamp is timestamp || data.timestamp == null);
+    }
+  }
+}

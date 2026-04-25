@@ -1,0 +1,46 @@
+{
+  "entities": {
+    "Application": {
+      "title": "Job Application",
+      "description": "Information about a job candidate and their application status.",
+      "type": "object",
+      "properties": {
+        "candidateName": { "type": "string" },
+        "candidateEmail": { "type": "string" },
+        "position": { "type": "string" },
+        "score": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "reviewing", "shortlisted", "rejected", "hired"] },
+        "conflictDetected": { "type": "boolean" },
+        "conflictDetails": { "type": "string" },
+        "maskedData": { "type": "object" },
+        "processingTimeMs": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["candidateName", "position", "status", "createdAt"]
+    },
+    "Anomaly": {
+      "title": "System Anomaly",
+      "description": "Detection of suspicious hiring activities like rapid approvals or delays.",
+      "type": "object",
+      "properties": {
+        "applicationId": { "type": "string" },
+        "type": { "type": "string", "enum": ["DELAY", "SPEED", "CONTRARY_SELECTION"] },
+        "message": { "type": "string" },
+        "severity": { "type": "string", "enum": ["low", "medium", "high"] },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["applicationId", "type", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/applications/{applicationId}": {
+      "schema": "Application",
+      "description": "Main collection for job applications."
+    },
+    "/anomalies/{anomalyId}": {
+      "schema": "Anomaly",
+      "description": "Tracking of suspicious system behaviors."
+    }
+  }
+}

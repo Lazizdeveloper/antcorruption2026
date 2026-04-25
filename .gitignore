@@ -1,0 +1,5 @@
+*.run.out
+*.run.err
+*.run.pid
+Thumbs.db
+.DS_Store
