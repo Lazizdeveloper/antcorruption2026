@@ -13,8 +13,20 @@ export interface Case {
   anomalies: string[];
 }
 
+export interface AdminProfile {
+  id: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  department: string;
+  photoUrl: string;
+}
+
 export interface Candidate {
   id: string;
+  candidateName: string;
+  position: string;
+  status: string;
   score: number;
   conflictRisk: 'Low' | 'High';
   conflictDetails?: string;
@@ -22,6 +34,50 @@ export interface Candidate {
   matchPercentage: number;
   interviewTime?: string;
   proctoringRisk?: number;
+  hiringAlert?: ConflictHireAlert | null;
+}
+
+export interface ConflictHirePerson {
+  fullName: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  middleName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  telegram?: string | null;
+  position?: string | null;
+  department?: string | null;
+  conflictDetails?: string | null;
+}
+
+export interface ConflictHireRiskFlags {
+  lowAiScore?: boolean;
+  auditConflict?: boolean;
+}
+
+export interface ConflictHireAlert {
+  id: string;
+  title: string;
+  message: string;
+  createdAt: string;
+  organization: string;
+  reasonSummary?: string | null;
+  riskFlags?: ConflictHireRiskFlags | null;
+  aiScore?: number | null;
+  auditStatus?: string | null;
+  hr?: ConflictHirePerson | null;
+  candidate: ConflictHirePerson;
+}
+
+export interface IntegrityReportDetails {
+  kind?: string;
+  organization?: string;
+  reasonSummary?: string | null;
+  riskFlags?: ConflictHireRiskFlags | null;
+  aiScore?: number | null;
+  auditStatus?: string | null;
+  hr?: ConflictHirePerson | null;
+  candidate?: ConflictHirePerson | null;
 }
 
 export interface ExternalProject {
@@ -74,4 +130,12 @@ export interface IntegrityReport {
   createdBy?: string | null;
   createdAt: string;
   updatedAt: string;
+  details?: IntegrityReportDetails | null;
+}
+
+export interface AdminNotification {
+  id: string;
+  text: string;
+  type: 'error' | 'success' | 'info';
+  createdAt: string;
 }

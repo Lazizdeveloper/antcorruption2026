@@ -2,21 +2,50 @@ import express from 'express';
 import { randomUUID } from 'node:crypto';
 import { authenticate, requireRoles } from '../middleware/auth.js';
 import {
+  mapAdminProfile,
   mapCandidateCard,
   mapCaseRow,
   mapExternalProjectRow,
+  mapIntegrityReport,
   mapNewsRow,
 } from '../db/mappers.js';
+import { buildAdminCandidateQuery } from '../db/adminCandidateQuery.js';
 import { query } from '../db/pool.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { buildAdminNotifications } from '../utils/adminNotifications.js';
 import { formatMonthLabel, formatPotentialSavings } from '../utils/formatters.js';
 import { HttpError } from '../utils/httpError.js';
-import { ensureFields } from '../utils/validation.js';
+import { deleteLocalUploadFromUrl } from '../utils/uploads.js';
+import { ensureFields, isValidPhoneNumber } from '../utils/validation.js';
 import { toCsv } from '../utils/csv.js';
 
 const router = express.Router();
 
 router.use(authenticate, requireRoles('admin'));
+
+const DASHBOARD_CANDIDATE_LIMIT = 10;
+const CANDIDATE_LIST_LIMIT = 20;
+const DASHBOARD_REPORT_NOTIFICATION_LIMIT = 4;
+const DASHBOARD_CASE_NOTIFICATION_LIMIT = 3;
+const DASHBOARD_ANOMALY_NOTIFICATION_LIMIT = 3;
+
+async function getAdminProfile(userId) {
+  const { rows } = await query(
+    `
+      SELECT id, full_name, email, phone, department, avatar_url
+      FROM users
+      WHERE id = $1
+      LIMIT 1
+    `,
+    [userId],
+  );
+
+  if (rows.length === 0) {
+    throw new HttpError(404, 'Admin profile not found');
+  }
+
+  return rows[0];
+}
 
 function buildRiskDistribution(cases) {
   const distribution = {
@@ -58,7 +87,19 @@ function buildTimeline(rows) {
 router.get(
   '/dashboard',
   asyncHandler(async (req, res) => {
-    const [casesResult, candidateResult, applicationResult, projectResult, newsResult, taxResult] =
+    const candidateQuery = buildAdminCandidateQuery(DASHBOARD_CANDIDATE_LIMIT);
+    const [
+      casesResult,
+      candidateResult,
+      applicationResult,
+      projectResult,
+      newsResult,
+      taxResult,
+      reportNotificationResult,
+      caseNotificationResult,
+      anomalyNotificationResult,
+      profileRow,
+    ] =
       await Promise.all([
         query(
           `
@@ -67,14 +108,7 @@ router.get(
             ORDER BY risk_score DESC, created_at DESC
           `,
         ),
-        query(
-          `
-            SELECT *
-            FROM applications
-            ORDER BY conflict_detected DESC, score DESC, submitted_at DESC
-            LIMIT 10
-          `,
-        ),
+        query(candidateQuery.text, candidateQuery.values),
         query(
           `
             SELECT submitted_at
@@ -103,6 +137,35 @@ router.get(
             ORDER BY region_name ASC
           `,
         ),
+        query(
+          `
+            SELECT id, title, severity, created_at, details
+            FROM integrity_reports
+            ORDER BY created_at DESC
+            LIMIT $1
+          `,
+          [DASHBOARD_REPORT_NOTIFICATION_LIMIT],
+        ),
+        query(
+          `
+            SELECT external_ref, created_at
+            FROM cases
+            WHERE risk_score >= 75
+            ORDER BY created_at DESC
+            LIMIT $1
+          `,
+          [DASHBOARD_CASE_NOTIFICATION_LIMIT],
+        ),
+        query(
+          `
+            SELECT id, message, severity, created_at
+            FROM anomalies
+            ORDER BY created_at DESC
+            LIMIT $1
+          `,
+          [DASHBOARD_ANOMALY_NOTIFICATION_LIMIT],
+        ),
+        getAdminProfile(req.user.id),
       ]);
 
     const cases = casesResult.rows.map(mapCaseRow);
@@ -122,6 +185,12 @@ router.get(
       soliqGraphData: taxResult.rows,
       externalProjects: projectResult.rows.map(mapExternalProjectRow),
       newsItems: newsResult.rows.map(mapNewsRow),
+      profile: mapAdminProfile(profileRow),
+      notifications: buildAdminNotifications({
+        reports: reportNotificationResult.rows,
+        cases: caseNotificationResult.rows,
+        anomalies: anomalyNotificationResult.rows,
+      }),
     });
   }),
 );
@@ -146,17 +215,64 @@ router.get(
 router.get(
   '/candidates',
   asyncHandler(async (req, res) => {
-    const { rows } = await query(
-      `
-        SELECT *
-        FROM applications
-        ORDER BY conflict_detected DESC, score DESC, submitted_at DESC
-        LIMIT 20
-      `,
-    );
+    const candidateQuery = buildAdminCandidateQuery(CANDIDATE_LIST_LIMIT);
+    const { rows } = await query(candidateQuery.text, candidateQuery.values);
 
     res.json({
       candidates: rows.map(mapCandidateCard),
+    });
+  }),
+);
+
+router.get(
+  '/profile',
+  asyncHandler(async (req, res) => {
+    const profileRow = await getAdminProfile(req.user.id);
+
+    res.json({
+      profile: mapAdminProfile(profileRow),
+    });
+  }),
+);
+
+router.put(
+  '/profile',
+  asyncHandler(async (req, res) => {
+    ensureFields(req.body, ['fullName']);
+
+    const profileRow = await getAdminProfile(req.user.id);
+    const fullName = String(req.body.fullName).trim();
+    const phone = String(req.body.phone ?? '').trim();
+    const photoUrl = req.body.photoUrl ?? profileRow.avatar_url ?? null;
+
+    if (!fullName) {
+      throw new HttpError(400, "Ism-familiyani to'g'ri kiriting.");
+    }
+
+    if (phone && !isValidPhoneNumber(phone)) {
+      throw new HttpError(400, "Telefon raqamini to'g'ri kiriting.");
+    }
+
+    const { rows } = await query(
+      `
+        UPDATE users
+        SET
+          full_name = $1,
+          phone = $2,
+          avatar_url = $3,
+          updated_at = NOW()
+        WHERE id = $4
+        RETURNING id, full_name, email, phone, department, avatar_url
+      `,
+      [fullName, phone || null, photoUrl, req.user.id],
+    );
+
+    if (photoUrl && photoUrl !== profileRow.avatar_url) {
+      await deleteLocalUploadFromUrl(profileRow.avatar_url);
+    }
+
+    res.json({
+      profile: mapAdminProfile(rows[0]),
     });
   }),
 );
@@ -176,18 +292,7 @@ router.get(
     );
 
     res.json({
-      reports: rows.map((row) => ({
-        id: row.id,
-        reportType: row.report_type,
-        referenceId: row.reference_id,
-        title: row.title,
-        message: row.message,
-        severity: row.severity,
-        status: row.status,
-        createdBy: row.created_by_name,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      })),
+      reports: rows.map(mapIntegrityReport),
     });
   }),
 );
@@ -234,17 +339,7 @@ router.post(
     );
 
     res.status(201).json({
-      report: {
-        id: rows[0].id,
-        reportType: rows[0].report_type,
-        referenceId: rows[0].reference_id,
-        title: rows[0].title,
-        message: rows[0].message,
-        severity: rows[0].severity,
-        status: rows[0].status,
-        createdAt: rows[0].created_at,
-        updatedAt: rows[0].updated_at,
-      },
+      report: mapIntegrityReport(rows[0]),
     });
   }),
 );

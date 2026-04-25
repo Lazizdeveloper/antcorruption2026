@@ -9,6 +9,10 @@ import { runSeed } from '../src/db/seed.js';
 const testRunId = `api-test-${Date.now()}`;
 const testEmail = `${testRunId}@example.com`;
 const reportTitlePrefix = `API TEST ${testRunId}`;
+const samplePdfBase64 = Buffer.from(
+  '%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF',
+  'utf8',
+).toString('base64');
 
 let baseUrl = '';
 let server;
@@ -20,6 +24,7 @@ const state = {
   registeredCandidateId: '',
   firstApplicationId: '',
   secondApplicationId: '',
+  thirdApplicationId: '',
   reportId: '',
 };
 
@@ -40,8 +45,16 @@ async function cleanupTestData() {
     `
       DELETE FROM integrity_reports
       WHERE title LIKE $1
+         OR (
+           report_type = 'application'
+           AND reference_id IN (
+             SELECT id::text
+             FROM applications
+             WHERE candidate_email = $2
+           )
+         )
     `,
-    [`${reportTitlePrefix}%`],
+    [`${reportTitlePrefix}%`, testEmail],
   );
 
   await query(
@@ -116,6 +129,48 @@ async function login(email, password) {
   assert.ok(payload.token);
 
   return payload;
+}
+
+async function uploadApplicationDocument(token, fileName) {
+  const { response, payload } = await requestJson('/api/uploads/application-document', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: {
+      fileName,
+      mimeType: 'application/pdf',
+      contentBase64: samplePdfBase64,
+    },
+  });
+
+  assert.equal(response.status, 201);
+  assert.equal(payload.mimeType, 'application/pdf');
+  assert.match(payload.url, /\/uploads\/application-documents\//);
+
+  return {
+    name: fileName,
+    url: payload.url,
+    mimeType: payload.mimeType,
+    sizeKb: payload.sizeKb,
+  };
+}
+
+async function buildRequiredDocuments(token, suffix = '') {
+  const normalizedSuffix = suffix ? `-${suffix}` : '';
+  const [diploma, passport, certificate, employment] = await Promise.all([
+    uploadApplicationDocument(token, `diploma${normalizedSuffix}.pdf`),
+    uploadApplicationDocument(token, `passport${normalizedSuffix}.pdf`),
+    uploadApplicationDocument(token, `certificate${normalizedSuffix}.pdf`),
+    uploadApplicationDocument(token, `employment${normalizedSuffix}.pdf`),
+  ]);
+
+  return [
+    { ...diploma, type: 'diploma' },
+    { ...passport, type: 'passport' },
+    { ...certificate, type: 'certificate' },
+    { ...employment, type: 'employment' },
+  ];
 }
 
 before(async () => {
@@ -232,6 +287,7 @@ test('EthicFlow backend API integration scenarios', async (t) => {
     assert.ok(dashboard.payload.candidate.id);
     assert.ok(dashboard.payload.vacancies.length >= 1);
     assert.ok(dashboard.payload.meritQuestions.length >= 3);
+    const originalGender = dashboard.payload.candidate.gender;
 
     state.registeredCandidateId = dashboard.payload.candidate.id;
 
@@ -242,15 +298,19 @@ test('EthicFlow backend API integration scenarios', async (t) => {
       },
       body: {
         phone: '+998909999999',
+        gender: 'Ayol',
         connections: ['API TEST relationship update'],
       },
     });
 
     assert.equal(profileUpdate.response.status, 200);
     assert.equal(profileUpdate.payload.candidate.phone, '+998909999999');
+    assert.equal(profileUpdate.payload.candidate.gender, originalGender);
   });
 
   await t.test('candidate application and merit-test scenarios work', async () => {
+    const requiredDocuments = await buildRequiredDocuments(state.candidateToken);
+
     const invalidCreate = await requestJson('/api/candidate/applications', {
       method: 'POST',
       headers: {
@@ -263,6 +323,56 @@ test('EthicFlow backend API integration scenarios', async (t) => {
 
     assert.equal(invalidCreate.response.status, 400);
 
+    const missingDocuments = await requestJson('/api/candidate/applications', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${state.candidateToken}`,
+      },
+      body: {
+        position: 'Katta Iqtisodchi',
+        department: 'Iqtisodiyot va Moliya Vazirligi',
+        phone: '+998909999999',
+        telegram: '@apitest_candidate',
+      },
+    });
+
+    assert.equal(missingDocuments.response.status, 400);
+    assert.match(missingDocuments.payload.message, /hujjat/i);
+
+    const invalidPhone = await requestJson('/api/candidate/applications', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${state.candidateToken}`,
+      },
+      body: {
+        position: 'Katta Iqtisodchi',
+        department: 'Iqtisodiyot va Moliya Vazirligi',
+        phone: '+998 90 999 99 99',
+        telegram: '@apitest_candidate',
+        documents: requiredDocuments,
+      },
+    });
+
+    assert.equal(invalidPhone.response.status, 400);
+    assert.match(invalidPhone.payload.message, /telefon/i);
+
+    const invalidTelegram = await requestJson('/api/candidate/applications', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${state.candidateToken}`,
+      },
+      body: {
+        position: 'Katta Iqtisodchi',
+        department: 'Iqtisodiyot va Moliya Vazirligi',
+        phone: '+998909999999',
+        telegram: '@bad-name',
+        documents: requiredDocuments,
+      },
+    });
+
+    assert.equal(invalidTelegram.response.status, 400);
+    assert.match(invalidTelegram.payload.message, /telegram/i);
+
     const createdApplication = await requestJson('/api/candidate/applications', {
       method: 'POST',
       headers: {
@@ -271,6 +381,7 @@ test('EthicFlow backend API integration scenarios', async (t) => {
       body: {
         position: 'Katta Iqtisodchi',
         department: 'Iqtisodiyot va Moliya Vazirligi',
+        phone: '+998909999999',
         telegram: '@apitest_candidate',
         maskedData: {
           skills: ['Excel', 'Budgeting', 'SQL'],
@@ -278,13 +389,7 @@ test('EthicFlow backend API integration scenarios', async (t) => {
           education: 'TDIU',
           summary: 'API test candidate profile',
         },
-        documents: [
-          {
-            name: 'cv.pdf',
-            type: 'resume',
-            url: '/files/api-test-cv.pdf',
-          },
-        ],
+        documents: requiredDocuments,
       },
     });
 
@@ -332,17 +437,43 @@ test('EthicFlow backend API integration scenarios', async (t) => {
       body: {
         position: 'Bosh Mutaxassis',
         department: 'Iqtisodiyot va Moliya Vazirligi',
+        phone: '+998909999999',
+        telegram: '@apitest_candidate_2',
         maskedData: {
           skills: ['Excel'],
           experience: 'API TEST low-score anomaly application',
           education: 'TDIU',
           summary: 'Conflict scenario',
         },
+        documents: await buildRequiredDocuments(state.candidateToken, 'second'),
       },
     });
 
     assert.equal(secondApplication.response.status, 201);
     state.secondApplicationId = secondApplication.payload.application.id;
+
+    const thirdApplication = await requestJson('/api/candidate/applications', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${state.candidateToken}`,
+      },
+      body: {
+        position: 'Bosh Mutaxassis',
+        department: 'Iqtisodiyot va Moliya Vazirligi',
+        phone: '+998909999999',
+        telegram: '@apitest_candidate_3',
+        maskedData: {
+          skills: ['Excel'],
+          experience: 'API TEST ai-only risk application',
+          education: 'TDIU',
+          summary: 'AI red without conflict',
+        },
+        documents: await buildRequiredDocuments(state.candidateToken, 'third'),
+      },
+    });
+
+    assert.equal(thirdApplication.response.status, 201);
+    state.thirdApplicationId = thirdApplication.payload.application.id;
   });
 
   await t.test('hr dashboard, filtering, status update, anomaly, and export work', async () => {
@@ -354,6 +485,26 @@ test('EthicFlow backend API integration scenarios', async (t) => {
 
     assert.equal(dashboard.response.status, 200);
     assert.ok(dashboard.payload.applications.length >= 1);
+    assert.equal(dashboard.payload.profile.email, 'hr@ethicflow.uz');
+
+    const profileUpdate = await requestJson('/api/hr/profile', {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${state.hrToken}`,
+      },
+      body: {
+        firstName: 'Abbos',
+        lastName: 'Karimov',
+        middleName: "Anvar o'g'li",
+        phone: '+998902222222',
+        passportNumber: 'AA1234567',
+        passportPinfl: '30201011234567',
+      },
+    });
+
+    assert.equal(profileUpdate.response.status, 200);
+    assert.equal(profileUpdate.payload.profile.phone, '+998902222222');
+    assert.equal(profileUpdate.payload.profile.passportNumber, 'AA1234567');
 
     const filtered = await requestJson(
       `/api/hr/applications?search=${encodeURIComponent(testRunId)}`,
@@ -366,6 +517,26 @@ test('EthicFlow backend API integration scenarios', async (t) => {
 
     assert.equal(filtered.response.status, 200);
     assert.ok(filtered.payload.applications.length >= 2);
+    assert.ok(
+      filtered.payload.applications.every(
+        (application) =>
+          Array.isArray(application.documents) &&
+          application.documents.every((document) => document.type !== 'passport'),
+      ),
+    );
+
+    const applicationDetail = await requestJson(`/api/hr/applications/${state.firstApplicationId}`, {
+      headers: {
+        Authorization: `Bearer ${state.hrToken}`,
+      },
+    });
+
+    assert.equal(applicationDetail.response.status, 200);
+    assert.ok(
+      applicationDetail.payload.application.documents.every(
+        (document) => document.type !== 'passport',
+      ),
+    );
 
     const invalidStatus = await requestJson(
       `/api/hr/applications/${state.secondApplicationId}/status`,
@@ -381,6 +552,22 @@ test('EthicFlow backend API integration scenarios', async (t) => {
     );
 
     assert.equal(invalidStatus.response.status, 400);
+
+    await query(
+      `
+        UPDATE applications
+        SET
+          score = 33,
+          merit_score = 33,
+          conflict_detected = FALSE,
+          conflict_details = NULL,
+          review_status = 'shortlisted',
+          candidate_stage = 'ranking',
+          updated_at = NOW()
+        WHERE id = $1
+      `,
+      [state.thirdApplicationId],
+    );
 
     const hired = await requestJson(
       `/api/hr/applications/${state.secondApplicationId}/status`,
@@ -398,6 +585,65 @@ test('EthicFlow backend API integration scenarios', async (t) => {
     assert.equal(hired.response.status, 200);
     assert.equal(hired.payload.application.status, 'hired');
 
+    const autoReports = await requestJson('/api/admin/reports', {
+      headers: {
+        Authorization: `Bearer ${state.adminToken}`,
+      },
+    });
+
+    assert.equal(autoReports.response.status, 200);
+    const conflictHireReport = autoReports.payload.reports.find(
+      (report) =>
+        report.referenceId === state.secondApplicationId &&
+        report.details?.kind === 'conflict_hire_alert',
+    );
+
+    assert.ok(conflictHireReport);
+    assert.match(conflictHireReport.title, /Riskli qabul/i);
+    assert.equal(conflictHireReport.details.organization, 'Iqtisodiyot va Moliya Vazirligi');
+    assert.equal(conflictHireReport.details.hr.email, 'hr@ethicflow.uz');
+    assert.equal(conflictHireReport.details.candidate.code, state.registeredCandidateId);
+    assert.equal(conflictHireReport.details.candidate.telegram, '@apitest_candidate_2');
+    assert.equal(conflictHireReport.details.reasonSummary, 'AI ball qizil va audit xulosasi qizil');
+    assert.equal(conflictHireReport.details.riskFlags.lowAiScore, true);
+    assert.equal(conflictHireReport.details.riskFlags.auditConflict, true);
+    assert.equal(conflictHireReport.details.auditStatus, 'CONFLICT');
+
+    const aiOnlyHired = await requestJson(
+      `/api/hr/applications/${state.thirdApplicationId}/status`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${state.hrToken}`,
+        },
+        body: {
+          status: 'hired',
+        },
+      },
+    );
+
+    assert.equal(aiOnlyHired.response.status, 200);
+    assert.equal(aiOnlyHired.payload.application.status, 'hired');
+
+    const refreshedReports = await requestJson('/api/admin/reports', {
+      headers: {
+        Authorization: `Bearer ${state.adminToken}`,
+      },
+    });
+
+    assert.equal(refreshedReports.response.status, 200);
+    const aiOnlyReport = refreshedReports.payload.reports.find(
+      (report) =>
+        report.referenceId === state.thirdApplicationId &&
+        report.details?.kind === 'conflict_hire_alert',
+    );
+
+    assert.ok(aiOnlyReport);
+    assert.equal(aiOnlyReport.details.reasonSummary, 'AI ball qizil');
+    assert.equal(aiOnlyReport.details.riskFlags.lowAiScore, true);
+    assert.equal(aiOnlyReport.details.riskFlags.auditConflict, false);
+    assert.equal(aiOnlyReport.details.auditStatus, 'CLEAN');
+
     const anomalies = await requestJson('/api/hr/anomalies', {
       headers: {
         Authorization: `Bearer ${state.hrToken}`,
@@ -409,7 +655,14 @@ test('EthicFlow backend API integration scenarios', async (t) => {
       anomalies.payload.anomalies.some(
         (anomaly) =>
           anomaly.applicationId === state.secondApplicationId &&
-          /past ball/i.test(anomaly.message),
+          /qizil/i.test(anomaly.message),
+      ),
+    );
+    assert.ok(
+      anomalies.payload.anomalies.some(
+        (anomaly) =>
+          anomaly.applicationId === state.thirdApplicationId &&
+          /ai ball qizil/i.test(anomaly.message),
       ),
     );
 
@@ -434,6 +687,17 @@ test('EthicFlow backend API integration scenarios', async (t) => {
     assert.equal(dashboard.response.status, 200);
     assert.ok(dashboard.payload.cases.length >= 1);
     assert.ok(dashboard.payload.candidates.length >= 1);
+    assert.ok(dashboard.payload.notifications.length >= 1);
+    assert.ok(
+      dashboard.payload.notifications.some((notification) =>
+        /AI ball qizil/i.test(notification.text),
+      ),
+    );
+    assert.ok(
+      dashboard.payload.notifications.some((notification) =>
+        typeof notification.text === 'string' && notification.createdAt,
+      ),
+    );
 
     const cases = await requestJson('/api/admin/cases', {
       headers: {
@@ -452,6 +716,13 @@ test('EthicFlow backend API integration scenarios', async (t) => {
 
     assert.equal(candidates.response.status, 200);
     assert.ok(candidates.payload.candidates.some((candidate) => candidate.id === state.registeredCandidateId));
+    const flaggedCandidate = candidates.payload.candidates.find(
+      (candidate) => candidate.id === state.registeredCandidateId,
+    );
+    assert.ok(flaggedCandidate);
+    assert.equal(flaggedCandidate.hiringAlert.organization, 'Iqtisodiyot va Moliya Vazirligi');
+    assert.equal(flaggedCandidate.hiringAlert.hr.fullName, 'Abbos Karimov');
+    assert.equal(flaggedCandidate.hiringAlert.candidate.phone, '+998909999999');
 
     const invalidReport = await requestJson('/api/admin/reports', {
       method: 'POST',

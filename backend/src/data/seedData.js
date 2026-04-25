@@ -39,6 +39,17 @@ export const seedCandidateProfiles = [
   },
 ];
 
+export const seedHrProfiles = [
+  {
+    email: 'hr@ethicflow.uz',
+    firstName: 'Abbos',
+    lastName: 'Karimov',
+    middleName: "Anvar o'g'li",
+    passportNumber: 'AA1234567',
+    passportPinfl: '30201011234567',
+  },
+];
+
 export const seedVacancies = [
   { department: 'Iqtisodiyot va Moliya Vazirligi', position: 'Katta Iqtisodchi' },
   { department: 'Iqtisodiyot va Moliya Vazirligi', position: 'Bosh Mutaxassis' },

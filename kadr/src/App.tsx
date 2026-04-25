@@ -1,4 +1,11 @@
-import { Fragment, useEffect, useState, type ReactNode } from 'react';
+import {
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+  type InputHTMLAttributes,
+  type ReactNode,
+} from 'react';
 import {
   Building2,
   FileText,
@@ -15,10 +22,13 @@ import {
   LogOut,
   Loader2,
   Save,
+  RefreshCcw,
+  Trash2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Application,
+  ApplicationDocument,
   ApplicationStatus,
   Candidate,
   MeritQuestion,
@@ -29,6 +39,8 @@ import {
   createApplication,
   fetchDashboard,
   submitMeritTest,
+  uploadApplicationDocument,
+  uploadProfileImage,
   updateProfile,
 } from './lib/api';
 
@@ -45,7 +57,76 @@ interface ApplicationDraft {
   summary: string;
 }
 
+type RequiredDocumentType = 'diploma' | 'passport' | 'certificate' | 'employment';
+
+type DocumentDraftMap = Record<RequiredDocumentType, ApplicationDocument | null>;
+
 const DEFAULT_SKILLS = ['Budjet tahlili', 'Excel', 'Power BI'];
+
+const REQUIRED_DOCUMENTS: Array<{ type: RequiredDocumentType; label: string }> = [
+  { type: 'diploma', label: "Oliy ma'lumot diplomi" },
+  { type: 'passport', label: 'Fuqarolik Pasporti' },
+  { type: 'certificate', label: "Ilmiy unvon / Sertifikat" },
+  { type: 'employment', label: 'Ish staji (E-Mehnat)' },
+];
+
+const MAX_PROFILE_IMAGE_SIZE_BYTES = 3 * 1024 * 1024;
+const MAX_APPLICATION_DOCUMENT_SIZE_BYTES = 10 * 1024 * 1024;
+const PHONE_PREFIX = '+998';
+const TELEGRAM_PREFIX = '@';
+
+function isValidPhoneNumber(value: string) {
+  return /^\+998\d{9}$/.test(value.trim());
+}
+
+function normalizePhoneInput(value: string) {
+  const digits = value.replace(/\D/g, '');
+  const localDigits = digits.startsWith('998') ? digits.slice(3) : digits;
+  return `${PHONE_PREFIX}${localDigits.slice(0, 9)}`;
+}
+
+function normalizeTelegramUsername(value: string) {
+  return normalizeTelegramInput(value).slice(1);
+}
+
+function normalizeTelegramInput(value: string) {
+  return value
+    .trim()
+    .replace(/^@+/, '')
+    .replace(/[^A-Za-z0-9_]/g, '')
+    .slice(0, 32)
+    .replace(/^/, TELEGRAM_PREFIX);
+}
+
+function isValidTelegramUsername(value: string) {
+  return /^@[A-Za-z0-9_]{5,32}$/.test(normalizeTelegramInput(value));
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => resolve(String(reader.result ?? ''));
+    reader.onerror = () => reject(new Error("Rasm faylini o'qib bo'lmadi"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function createAvatarPlaceholder(label: string) {
+  const initials = label
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('') || 'EF';
+
+  return `data:image/svg+xml;utf8,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+      <rect width="96" height="96" rx="24" fill="#111827" />
+      <text x="50%" y="53%" dominant-baseline="middle" text-anchor="middle" fill="#10b981" font-family="Arial, sans-serif" font-size="28" font-weight="700">${initials}</text>
+    </svg>`,
+  )}`;
+}
 
 function getStatusStep(status?: ApplicationStatus | null) {
   switch (status) {
@@ -66,18 +147,14 @@ function getStatusStep(status?: ApplicationStatus | null) {
 
 function createDraft(
   vacancies: VacancyGroup[],
-  candidate: Candidate | null,
   application: Application | null,
+  fallbackPhone = PHONE_PREFIX,
 ): ApplicationDraft {
-  const department = application?.department ?? vacancies[0]?.department ?? '';
-  const positions = vacancies.find((item) => item.department === department)?.positions ?? [];
-  const position = application?.position ?? positions[0] ?? '';
-
   return {
-    department,
-    position,
-    phone: application?.phone ?? candidate?.phone ?? '',
-    telegram: application?.telegram ?? '@candidate',
+    department: '',
+    position: '',
+    phone: normalizePhoneInput(application?.phone ?? fallbackPhone),
+    telegram: normalizeTelegramInput(application?.telegram ?? TELEGRAM_PREFIX),
     skills: (application?.maskedData?.skills ?? DEFAULT_SKILLS).join(', '),
     experience:
       application?.maskedData?.experience ??
@@ -87,6 +164,23 @@ function createDraft(
       application?.maskedData?.summary ??
       "Davlat moliyasi bo'yicha ishlashni xohlaydi.",
   };
+}
+
+function createDocumentDrafts(application: Application | null): DocumentDraftMap {
+  const existingDocuments = Array.isArray(application?.documents) ? application.documents : [];
+
+  return REQUIRED_DOCUMENTS.reduce((accumulator, documentConfig) => {
+    const matchedDocument =
+      existingDocuments.find((document) => document.type === documentConfig.type) ?? null;
+
+    accumulator[documentConfig.type] = matchedDocument;
+    return accumulator;
+  }, {
+    diploma: null,
+    passport: null,
+    certificate: null,
+    employment: null,
+  } as DocumentDraftMap);
 }
 
 function fallbackRanking(application: Application | null): RankingPreviewRow[] {
@@ -112,17 +206,25 @@ export default function App() {
   const [applicationDraft, setApplicationDraft] = useState<ApplicationDraft>({
     department: '',
     position: '',
-    phone: '',
-    telegram: '@candidate',
+    phone: PHONE_PREFIX,
+    telegram: TELEGRAM_PREFIX,
     skills: DEFAULT_SKILLS.join(', '),
     experience: '',
     education: '',
     summary: '',
   });
+  const [documentDrafts, setDocumentDrafts] = useState<DocumentDraftMap>(
+    createDocumentDrafts(null),
+  );
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [pendingProfilePhoto, setPendingProfilePhoto] = useState<File | null>(null);
+  const [uploadingDocumentType, setUploadingDocumentType] =
+    useState<RequiredDocumentType | null>(null);
   const [submittingApplication, setSubmittingApplication] = useState(false);
   const [submittingTest, setSubmittingTest] = useState(false);
+  const [isSubmitConfirmOpen, setIsSubmitConfirmOpen] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -136,6 +238,8 @@ export default function App() {
       const dashboard = await fetchDashboard();
       const safeCandidate = {
         ...dashboard.candidate,
+        photoUrl: dashboard.candidate?.photoUrl ?? '',
+        phone: normalizePhoneInput(dashboard.candidate?.phone ?? PHONE_PREFIX),
         connections: Array.isArray(dashboard.candidate?.connections)
           ? dashboard.candidate.connections
           : [],
@@ -156,7 +260,11 @@ export default function App() {
           : fallbackRanking(dashboard.application),
       );
       setCandidate(safeCandidate);
-      setApplicationDraft(createDraft(safeVacancies, safeCandidate, dashboard.application));
+      setApplicationDraft(
+        createDraft(safeVacancies, dashboard.application, safeCandidate.phone ?? PHONE_PREFIX),
+      );
+      setDocumentDrafts(createDocumentDrafts(dashboard.application));
+      setPendingProfilePhoto(null);
       setErrorMessage(null);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Backend bilan aloqa uzildi');
@@ -172,21 +280,200 @@ export default function App() {
   const currentStep = getStatusStep(application?.status);
   const currentVacancyPositions =
     vacancies.find((item) => item.department === applicationDraft.department)?.positions ?? [];
+  const vacancyPlaceholder = !applicationDraft.department
+    ? "Avval vazirlikni tanlang"
+    : currentVacancyPositions.length === 0
+      ? 'Vakansiyalar topilmadi'
+      : 'Tanlang';
+  const missingRequiredDocuments = REQUIRED_DOCUMENTS.some(
+    ({ type }) => !documentDrafts[type],
+  );
+  const hasValidDepartmentSelection =
+    applicationDraft.department.trim() !== '' &&
+    vacancies.some((item) => item.department === applicationDraft.department);
+  const hasValidPositionSelection =
+    applicationDraft.position.trim() !== '' &&
+    currentVacancyPositions.includes(applicationDraft.position);
+  const normalizedPhone = normalizePhoneInput(applicationDraft.phone);
+  const normalizedTelegram = normalizeTelegramInput(applicationDraft.telegram);
+  const hasPhoneValue = normalizedPhone !== PHONE_PREFIX;
+  const hasTelegramValue = normalizedTelegram !== TELEGRAM_PREFIX;
+  const hasValidPhoneNumber = hasPhoneValue && isValidPhoneNumber(normalizedPhone);
+  const hasValidTelegramUsername =
+    hasTelegramValue && isValidTelegramUsername(normalizedTelegram);
+  const phoneInputError =
+    !submitAttempted
+      ? undefined
+      : !hasPhoneValue
+        ? 'Majburiy maydon'
+        : !hasValidPhoneNumber
+          ? "Telefon raqamini to'g'ri kiriting. Masalan: +998901234567"
+          : undefined;
+  const telegramInputError =
+    !submitAttempted
+      ? undefined
+      : !hasTelegramValue
+        ? 'Majburiy maydon'
+        : !hasValidTelegramUsername
+          ? "Telegram username'ni to'g'ri kiriting. Masalan: @username"
+          : undefined;
+  const departmentInputError =
+    !submitAttempted
+      ? undefined
+      : applicationDraft.department.trim() === ''
+        ? 'Majburiy maydon'
+        : !hasValidDepartmentSelection
+          ? "Vazirlikni ro'yxatdan tanlang"
+          : undefined;
+  const positionInputError =
+    !submitAttempted
+      ? undefined
+      : applicationDraft.position.trim() === ''
+        ? 'Majburiy maydon'
+        : !hasValidPositionSelection
+          ? "Vakansiyani ro'yxatdan tanlang"
+          : undefined;
+  const documentsInputError =
+    submitAttempted && missingRequiredDocuments
+      ? "4 ta majburiy PDF hujjatni yuklang"
+      : undefined;
 
-  const handleApply = async () => {
+  const handleDocumentSelect = async (
+    documentType: RequiredDocumentType,
+    label: string,
+    file: File | null,
+  ) => {
+    if (!file) {
+      return;
+    }
+
+    const isPdf =
+      file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+
+    if (!isPdf) {
+      setErrorMessage(`${label} faqat PDF formatida yuklanishi kerak.`);
+      setSuccessMessage(null);
+      return;
+    }
+
+    if (file.size > MAX_APPLICATION_DOCUMENT_SIZE_BYTES) {
+      setErrorMessage(`${label} 10 MB dan oshmasligi kerak.`);
+      setSuccessMessage(null);
+      return;
+    }
+
+    setUploadingDocumentType(documentType);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    try {
+      const uploadedDocument = await uploadApplicationDocument(file);
+
+      setDocumentDrafts((prev) => ({
+        ...prev,
+        [documentType]: {
+          name: file.name,
+          type: documentType,
+          url: uploadedDocument.url,
+          mimeType: uploadedDocument.mimeType || file.type || 'application/pdf',
+          sizeKb: uploadedDocument.sizeKb ?? Math.max(1, Math.round(file.size / 1024)),
+        },
+      }));
+      setSuccessMessage(`${label} muvaffaqiyatli yuklandi.`);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : `${label} faylini yuklab bo'lmadi.`,
+      );
+      setSuccessMessage(null);
+    } finally {
+      setUploadingDocumentType((currentType) =>
+        currentType === documentType ? null : currentType,
+      );
+    }
+  };
+
+  const handleDocumentClear = (documentType: RequiredDocumentType) => {
+    setDocumentDrafts((prev) => ({
+      ...prev,
+      [documentType]: null,
+    }));
+    setSuccessMessage(null);
+  };
+
+  const validateApplicationForm = () => {
+    setSubmitAttempted(true);
+
+    const requiredFields = {
+      department: applicationDraft.department.trim(),
+      position: applicationDraft.position.trim(),
+      phone: normalizedPhone,
+      telegram: normalizedTelegram,
+    };
+
+    if (
+      !requiredFields.department ||
+      !requiredFields.position ||
+      !hasPhoneValue ||
+      !hasTelegramValue
+    ) {
+      setErrorMessage("Majburiy maydonlarni to'ldiring: vazirlik, vakansiya, telefon va telegram.");
+      setSuccessMessage(null);
+      return null;
+    }
+
+    if (!hasValidDepartmentSelection || !hasValidPositionSelection) {
+      setErrorMessage("Vazirlik va vakansiyani ro'yxatdan to'g'ri tanlang.");
+      setSuccessMessage(null);
+      return null;
+    }
+
+    if (!hasValidPhoneNumber) {
+      setErrorMessage("Telefon raqamini to'g'ri kiriting. Masalan: +998901234567.");
+      setSuccessMessage(null);
+      return null;
+    }
+
+    if (!hasValidTelegramUsername) {
+      setErrorMessage("Telegram username'ni to'g'ri kiriting. Masalan: @username.");
+      setSuccessMessage(null);
+      return null;
+    }
+
+    if (uploadingDocumentType) {
+      setErrorMessage("Hujjat yuklanishini kuting, keyin arizani yuboring.");
+      setSuccessMessage(null);
+      return null;
+    }
+
+    if (missingRequiredDocuments) {
+      setErrorMessage("Majburiy hujjatlarni yuklang: diplom, pasport, sertifikat va ish staji PDF.");
+      setSuccessMessage(null);
+      return null;
+    }
+
+    setErrorMessage(null);
+    return requiredFields;
+  };
+
+  const submitApplication = async (requiredFields: {
+    department: string;
+    position: string;
+    phone: string;
+    telegram: string;
+  }) => {
     setSubmittingApplication(true);
+    setErrorMessage(null);
     setSuccessMessage(null);
 
     try {
       const createdApplication = await createApplication({
-        department: applicationDraft.department,
-        position: applicationDraft.position,
-        phone: applicationDraft.phone,
-        telegram: applicationDraft.telegram,
-        documents: [
-          { name: 'diploma.pdf', type: 'education', url: '/files/diploma.pdf' },
-          { name: 'passport.pdf', type: 'identity', url: '/files/passport.pdf' },
-        ],
+        department: requiredFields.department,
+        position: requiredFields.position,
+        phone: requiredFields.phone,
+        telegram: requiredFields.telegram,
+        documents: Object.values(documentDrafts).filter(
+          (document): document is ApplicationDocument => document !== null,
+        ),
         maskedData: {
           skills: applicationDraft.skills
             .split(',')
@@ -201,6 +488,8 @@ export default function App() {
       setApplication(createdApplication);
       setRankingPreview(fallbackRanking(createdApplication));
       setSuccessMessage("Ariza backend bazaga saqlandi va ko'rib chiqishga yuborildi.");
+      setSubmitAttempted(false);
+      setIsSubmitConfirmOpen(false);
       setActiveTab('status');
       await loadDashboard(false);
     } catch (error) {
@@ -210,8 +499,38 @@ export default function App() {
     }
   };
 
+  const handleApply = () => {
+    const requiredFields = validateApplicationForm();
+
+    if (!requiredFields) {
+      return;
+    }
+
+    setSuccessMessage(null);
+    setIsSubmitConfirmOpen(true);
+  };
+
+  const handleConfirmApply = async () => {
+    const requiredFields = validateApplicationForm();
+
+    if (!requiredFields) {
+      setIsSubmitConfirmOpen(false);
+      return;
+    }
+
+    await submitApplication(requiredFields);
+  };
+
   const handleSaveProfile = async () => {
     if (!profileDraft) {
+      return;
+    }
+
+    const normalizedProfilePhone = normalizePhoneInput(profileDraft.phone);
+
+    if (!isValidPhoneNumber(normalizedProfilePhone)) {
+      setErrorMessage("Telefon raqamini to'g'ri kiriting. Masalan: +998901234567.");
+      setSuccessMessage(null);
       return;
     }
 
@@ -219,12 +538,20 @@ export default function App() {
     setSuccessMessage(null);
 
     try {
-      const updatedCandidate = await updateProfile(profileDraft);
+      const nextPhotoUrl = pendingProfilePhoto
+        ? await uploadProfileImage(pendingProfilePhoto)
+        : profileDraft.photoUrl;
+      const updatedCandidate = await updateProfile({
+        ...profileDraft,
+        phone: normalizedProfilePhone,
+        photoUrl: nextPhotoUrl,
+      });
       setCandidate(updatedCandidate);
       setProfileDraft(updatedCandidate);
+      setPendingProfilePhoto(null);
       setApplicationDraft((prev) => ({
         ...prev,
-        phone: updatedCandidate.phone,
+        phone: normalizePhoneInput(updatedCandidate.phone),
       }));
       setSuccessMessage('Profil backend orqali yangilandi.');
       setErrorMessage(null);
@@ -233,6 +560,40 @@ export default function App() {
     } finally {
       setSavingProfile(false);
     }
+  };
+
+  const handleProfilePhotoChange = async (file: File | null) => {
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      setErrorMessage('Profil uchun faqat rasm faylini yuklang.');
+      setSuccessMessage(null);
+      return;
+    }
+
+    if (file.size > MAX_PROFILE_IMAGE_SIZE_BYTES) {
+      setErrorMessage('Profil rasmi 3 MB dan oshmasligi kerak.');
+      setSuccessMessage(null);
+      return;
+    }
+
+    try {
+      const previewUrl = await readFileAsDataUrl(file);
+      setPendingProfilePhoto(file);
+      setProfileDraft((prev) => (prev ? { ...prev, photoUrl: previewUrl } : prev));
+      setErrorMessage(null);
+      setSuccessMessage(null);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Rasm faylini o'qib bo'lmadi");
+      setSuccessMessage(null);
+    }
+  };
+
+  const handleProfilePhotoReset = () => {
+    setPendingProfilePhoto(null);
+    setProfileDraft((prev) => (prev && candidate ? { ...prev, photoUrl: candidate.photoUrl } : prev));
   };
 
   const handleCompleteMeritTest = async (answers: number[]) => {
@@ -337,7 +698,11 @@ export default function App() {
 
           <div className="flex items-center gap-3 p-3 rounded-xl bg-zinc-900/30 hover:bg-zinc-800/50 transition-all cursor-pointer group border border-transparent hover:border-zinc-800/50">
             <img
-              src={candidate.photoUrl}
+              src={
+                profileDraft?.photoUrl ||
+                candidate.photoUrl ||
+                createAvatarPlaceholder(`${candidate.name} ${candidate.surname}`)
+              }
               alt={candidate.name}
               className="w-10 h-10 rounded-full border border-zinc-800 shadow-lg grayscale"
             />
@@ -447,60 +812,114 @@ export default function App() {
                 <div className="space-y-8 relative z-10">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <label className="block text-[10px] font-bold text-zinc-600 uppercase tracking-[0.2em]">Vazirlik / Tashkilot</label>
+                      <label className="block text-[10px] font-bold text-zinc-600 uppercase tracking-[0.2em]">Vazirlik / Tashkilot *</label>
                       <select
                         value={applicationDraft.department}
                         onChange={(event) => {
                           const department = event.target.value;
-                          const firstPosition = vacancies.find((item) => item.department === department)?.positions[0] ?? '';
-                          setApplicationDraft((prev) => ({ ...prev, department, position: firstPosition }));
+                          setApplicationDraft((prev) => ({ ...prev, department, position: '' }));
                         }}
-                        className="w-full bg-zinc-900/40 border border-zinc-800/50 rounded-xl px-5 py-4 font-semibold text-zinc-400 focus:ring-1 focus:ring-emerald-500/30 outline-none transition-all appearance-none cursor-pointer"
+                        className={`w-full bg-zinc-900/40 border rounded-xl px-5 py-4 font-semibold text-zinc-400 outline-none transition-all appearance-none cursor-pointer ${
+                          departmentInputError
+                            ? 'border-red-900/60 focus:ring-1 focus:ring-red-500/30'
+                            : 'border-zinc-800/50 focus:ring-1 focus:ring-emerald-500/30'
+                        }`}
                       >
+                        <option value="" className="bg-[#080808]">Tanlang</option>
                         {vacancies.map((item) => (
                           <option key={item.department} value={item.department} className="bg-[#080808]">
                             {item.department}
                           </option>
                         ))}
                       </select>
+                      {departmentInputError ? (
+                        <p className="text-[11px] text-red-400">{departmentInputError}</p>
+                      ) : null}
                     </div>
 
                     <div className="space-y-2">
-                      <label className="block text-[10px] font-bold text-zinc-600 uppercase tracking-[0.2em]">Vakansiya nomi</label>
+                      <label className="block text-[10px] font-bold text-zinc-600 uppercase tracking-[0.2em]">Vakansiya nomi *</label>
                       <select
                         value={applicationDraft.position}
                         onChange={(event) => setApplicationDraft((prev) => ({ ...prev, position: event.target.value }))}
-                        className="w-full bg-zinc-900/40 border border-zinc-800/50 rounded-xl px-5 py-4 font-semibold text-zinc-400 focus:ring-1 focus:ring-emerald-500/30 outline-none transition-all appearance-none cursor-pointer"
+                        className={`w-full bg-zinc-900/40 border rounded-xl px-5 py-4 font-semibold text-zinc-400 outline-none transition-all appearance-none cursor-pointer ${
+                          positionInputError
+                            ? 'border-red-900/60 focus:ring-1 focus:ring-red-500/30'
+                            : 'border-zinc-800/50 focus:ring-1 focus:ring-emerald-500/30'
+                        }`}
                       >
+                        <option value="" className="bg-[#080808]">{vacancyPlaceholder}</option>
                         {currentVacancyPositions.map((position) => (
                           <option key={position} value={position} className="bg-[#080808]">
                             {position}
                           </option>
                         ))}
                       </select>
+                      {positionInputError ? (
+                        <p className="text-[11px] text-red-400">{positionInputError}</p>
+                      ) : !applicationDraft.department ? (
+                        <p className="text-[11px] text-zinc-500">
+                          Avval `Vazirlik / Tashkilot` ni tanlang, keyin shu yerda vakansiyalar chiqadi.
+                        </p>
+                      ) : null}
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <FormInput label="Telefon" value={applicationDraft.phone} onChange={(value) => setApplicationDraft((prev) => ({ ...prev, phone: value }))} />
-                    <FormInput label="Telegram" value={applicationDraft.telegram} onChange={(value) => setApplicationDraft((prev) => ({ ...prev, telegram: value }))} />
+                    <FormInput
+                      label="Telefon *"
+                      value={applicationDraft.phone}
+                      onChange={(value) =>
+                        setApplicationDraft((prev) => ({
+                          ...prev,
+                          phone: normalizePhoneInput(value),
+                        }))
+                      }
+                      placeholder="+998901234567"
+                      inputMode="tel"
+                      error={phoneInputError}
+                    />
+                    <FormInput
+                      label="Telegram *"
+                      value={applicationDraft.telegram}
+                      onChange={(value) =>
+                        setApplicationDraft((prev) => ({
+                          ...prev,
+                          telegram: normalizeTelegramInput(value),
+                        }))
+                      }
+                      placeholder="@username"
+                      error={telegramInputError}
+                    />
                   </div>
 
                   <div className="space-y-6">
                     <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em]">Majburiy hujjatlar</label>
                     <div className="grid grid-cols-2 gap-4">
-                      <FileUploadBox label="Oliy ma'lumot diplomi" done />
-                      <FileUploadBox label="Fuqarolik Pasporti" done />
-                      <FileUploadBox label="Ilmiy unvon / Sertifikat" />
-                      <FileUploadBox label="Ish staji (E-Mehnat)" />
+                      {REQUIRED_DOCUMENTS.map((document) => (
+                        <Fragment key={document.type}>
+                          <FileUploadBox
+                            label={document.label}
+                            fileName={documentDrafts[document.type]?.name}
+                            isUploading={uploadingDocumentType === document.type}
+                            onClear={() => handleDocumentClear(document.type)}
+                            onFileSelect={(file) =>
+                              void handleDocumentSelect(document.type, document.label, file)
+                            }
+                          />
+                        </Fragment>
+                      ))}
                     </div>
+                    {documentsInputError ? (
+                      <p className="text-[11px] text-red-400">{documentsInputError}</p>
+                    ) : null}
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <FormTextarea label="Ko'nikmalar" value={applicationDraft.skills} onChange={(value) => setApplicationDraft((prev) => ({ ...prev, skills: value }))} />
-                    <FormTextarea label="Tajriba" value={applicationDraft.experience} onChange={(value) => setApplicationDraft((prev) => ({ ...prev, experience: value }))} />
-                    <FormTextarea label="Ta'lim" value={applicationDraft.education} onChange={(value) => setApplicationDraft((prev) => ({ ...prev, education: value }))} />
-                    <FormTextarea label="Qisqa tavsif" value={applicationDraft.summary} onChange={(value) => setApplicationDraft((prev) => ({ ...prev, summary: value }))} />
+                    <FormTextarea label="Ko'nikmalar (ixtiyoriy)" value={applicationDraft.skills} onChange={(value) => setApplicationDraft((prev) => ({ ...prev, skills: value }))} />
+                    <FormTextarea label="Tajriba (ixtiyoriy)" value={applicationDraft.experience} onChange={(value) => setApplicationDraft((prev) => ({ ...prev, experience: value }))} />
+                    <FormTextarea label="Ta'lim (ixtiyoriy)" value={applicationDraft.education} onChange={(value) => setApplicationDraft((prev) => ({ ...prev, education: value }))} />
+                    <FormTextarea label="Qisqa tavsif (ixtiyoriy)" value={applicationDraft.summary} onChange={(value) => setApplicationDraft((prev) => ({ ...prev, summary: value }))} />
                   </div>
 
                   <div className="p-6 bg-zinc-900/30 rounded-2xl border border-zinc-800/50 transition-all hover:bg-zinc-800/50">
@@ -522,13 +941,16 @@ export default function App() {
 
                   <button
                     onClick={() => void handleApply()}
-                    disabled={submittingApplication || !applicationDraft.department || !applicationDraft.position}
+                    disabled={submittingApplication || Boolean(uploadingDocumentType)}
                     className="w-full bg-emerald-600 text-black py-4 rounded-xl font-bold text-lg hover:bg-emerald-500 transition-all flex items-center justify-center gap-2 group shadow-[0_0_20px_rgba(5,150,105,0.2)] hover:scale-[1.01] disabled:opacity-60 disabled:hover:scale-100"
                   >
                     {submittingApplication ? <Loader2 size={20} className="animate-spin" /> : null}
-                    Arizani Backendga Yuborish
+                    Arizani Yuborish
                     <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
                   </button>
+                  <p className="text-[11px] text-zinc-500">
+                    `*` bilan belgilangan maydonlar va barcha 4 ta PDF hujjat majburiy. Telefon to'g'ri raqam formatida, Telegram esa `@username` ko'rinishida bo'lishi kerak.
+                  </p>
                 </div>
               </div>
             </motion.div>
@@ -553,7 +975,14 @@ export default function App() {
                       </div>
 
                       <div className="flex gap-6 pb-6 border-b border-zinc-800/30 mb-6">
-                        <img src={candidate.photoUrl} className="w-24 h-24 rounded-2xl object-cover grayscale opacity-60 hover:opacity-100 transition-all" />
+                        <img
+                          src={
+                            profileDraft?.photoUrl ||
+                            candidate.photoUrl ||
+                            createAvatarPlaceholder(`${candidate.name} ${candidate.surname}`)
+                          }
+                          className="w-24 h-24 rounded-2xl object-cover grayscale opacity-60 hover:opacity-100 transition-all"
+                        />
                         <div className="space-y-1">
                           <h4 className="text-2xl font-bold text-zinc-200">{candidate.name} {candidate.surname}</h4>
                           <p className="text-zinc-600 text-sm">{candidate.gender} • {candidate.birthPlace}</p>
@@ -700,18 +1129,96 @@ export default function App() {
                   </button>
                 </div>
 
+                <div className="mb-8">
+                  <ProfileImageField
+                    name={`${profileDraft.name} ${profileDraft.surname}`}
+                    imageUrl={profileDraft.photoUrl}
+                    hasPendingFile={Boolean(pendingProfilePhoto)}
+                    onFileSelect={handleProfilePhotoChange}
+                    onReset={handleProfilePhotoReset}
+                  />
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <FormInput label="Ism" value={profileDraft.name} onChange={(value) => setProfileDraft((prev) => prev ? { ...prev, name: value } : prev)} />
                   <FormInput label="Familiya" value={profileDraft.surname} onChange={(value) => setProfileDraft((prev) => prev ? { ...prev, surname: value } : prev)} />
-                  <FormInput label="Jins" value={profileDraft.gender} onChange={(value) => setProfileDraft((prev) => prev ? { ...prev, gender: value } : prev)} />
+                  <FormInput label="Jins" value={profileDraft.gender} disabled onChange={() => {}} />
                   <FormInput label="Tug'ilgan joy" value={profileDraft.birthPlace} onChange={(value) => setProfileDraft((prev) => prev ? { ...prev, birthPlace: value } : prev)} />
                   <FormInput label="Email" value={profileDraft.email} disabled onChange={() => {}} />
-                  <FormInput label="Telefon" value={profileDraft.phone} onChange={(value) => setProfileDraft((prev) => prev ? { ...prev, phone: value } : prev)} />
-                  <FormInput label="Rasm URL" value={profileDraft.photoUrl} onChange={(value) => setProfileDraft((prev) => prev ? { ...prev, photoUrl: value } : prev)} />
+                  <FormInput label="Telefon" value={profileDraft.phone} onChange={(value) => setProfileDraft((prev) => prev ? { ...prev, phone: normalizePhoneInput(value) } : prev)} />
                   <FormTextarea label="Aloqalar" value={profileDraft.connections.join('\n')} onChange={(value) => setProfileDraft((prev) => prev ? { ...prev, connections: value.split('\n').map((item) => item.trim()).filter(Boolean) } : prev)} />
                 </div>
               </div>
             </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {isSubmitConfirmOpen && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsSubmitConfirmOpen(false)}
+                className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[70]"
+              />
+              <motion.div
+                initial={{ opacity: 0, y: 20, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 20, scale: 0.98 }}
+                className="fixed inset-0 z-[71] flex items-center justify-center px-6"
+              >
+                <div className="w-full max-w-lg rounded-3xl border border-zinc-800/60 bg-[#080808] p-8 shadow-2xl">
+                  <p className="text-[10px] uppercase tracking-[0.3em] text-emerald-500/70 font-bold">
+                    Tasdiqlash
+                  </p>
+                  <h3 className="mt-3 text-2xl font-serif italic text-zinc-200">
+                    Kiritilgan ma'lumotlar to'g'rimi?
+                  </h3>
+                  <p className="mt-3 text-sm text-zinc-500 leading-relaxed">
+                    Ariza yuborilgandan keyin ma'lumotlar backend bazaga saqlanadi va ko'rib chiqish jarayoni boshlanadi.
+                  </p>
+
+                  <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="rounded-2xl border border-zinc-800/50 bg-zinc-900/30 px-4 py-3">
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-600">Vazirlik</p>
+                      <p className="mt-2 text-sm font-semibold text-zinc-300">{applicationDraft.department}</p>
+                    </div>
+                    <div className="rounded-2xl border border-zinc-800/50 bg-zinc-900/30 px-4 py-3">
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-600">Vakansiya</p>
+                      <p className="mt-2 text-sm font-semibold text-zinc-300">{applicationDraft.position}</p>
+                    </div>
+                    <div className="rounded-2xl border border-zinc-800/50 bg-zinc-900/30 px-4 py-3">
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-600">Telefon</p>
+                      <p className="mt-2 text-sm font-semibold text-zinc-300">{normalizedPhone}</p>
+                    </div>
+                    <div className="rounded-2xl border border-zinc-800/50 bg-zinc-900/30 px-4 py-3">
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-600">Telegram</p>
+                      <p className="mt-2 text-sm font-semibold text-zinc-300">
+                        {normalizedTelegram}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-8 flex flex-col-reverse md:flex-row gap-3">
+                    <button
+                      onClick={() => setIsSubmitConfirmOpen(false)}
+                      className="w-full rounded-2xl border border-zinc-800 px-5 py-4 text-sm font-bold text-zinc-400 hover:bg-zinc-900/40 hover:text-zinc-200 transition-colors"
+                    >
+                      Yo'q, qayta ko'raman
+                    </button>
+                    <button
+                      onClick={() => void handleConfirmApply()}
+                      disabled={submittingApplication || Boolean(uploadingDocumentType)}
+                      className="w-full rounded-2xl bg-emerald-600 px-5 py-4 text-sm font-bold text-black hover:bg-emerald-500 transition-colors disabled:opacity-60"
+                    >
+                      {submittingApplication ? 'Yuborilmoqda...' : "Ha, arizani yuborish"}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </>
           )}
         </AnimatePresence>
       </main>
@@ -768,22 +1275,193 @@ function ProgressStep({ icon, label, active, done }: { icon: ReactNode, label: s
   );
 }
 
-function FileUploadBox({ label, done }: { label: string, done?: boolean }) {
+function FileUploadBox({
+  label,
+  fileName,
+  isUploading,
+  onClear,
+  onFileSelect,
+}: {
+  label: string,
+  fileName?: string,
+  isUploading?: boolean,
+  onClear: () => void,
+  onFileSelect: (file: File | null) => void,
+}) {
+  const isUploaded = Boolean(fileName);
+  const inputId = `upload-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const openPicker = () => {
+    if (isUploading) {
+      return;
+    }
+
+    inputRef.current?.click();
+  };
+
   return (
-    <div className={`border-2 border-dashed rounded-2xl p-5 transition-all hover:bg-zinc-800/20 cursor-pointer group ${
-      done ? 'border-emerald-600/30 bg-emerald-600/5' : 'border-zinc-800/50'
-    }`}>
+    <div
+      onClick={openPicker}
+      className={`block border-2 border-dashed rounded-2xl p-5 transition-all hover:bg-zinc-800/20 cursor-pointer group ${
+        isUploaded ? 'border-emerald-600/30 bg-emerald-600/5' : 'border-zinc-800/50'
+      }`}
+    >
+      <input
+        id={inputId}
+        ref={inputRef}
+        type="file"
+        accept="application/pdf,.pdf"
+        className="sr-only"
+        onClick={(event) => {
+          event.currentTarget.value = '';
+        }}
+        onChange={(event) => {
+          onFileSelect(event.target.files?.[0] ?? null);
+        }}
+      />
+
       <div className="flex items-center justify-between mb-3">
-        <Upload size={20} className={done ? 'text-emerald-500' : 'text-zinc-700 group-hover:text-emerald-500/60'} />
-        {done && <CheckCircle2 size={16} className="text-emerald-600" />}
+        <Upload
+          size={20}
+          className={
+            isUploaded ? 'text-emerald-500' : 'text-zinc-700 group-hover:text-emerald-500/60'
+          }
+        />
+        {isUploaded && <CheckCircle2 size={16} className="text-emerald-600" />}
       </div>
-      <p className={`text-xs font-semibold ${done ? 'text-emerald-500/80' : 'text-zinc-600 group-hover:text-zinc-400'}`}>{label}</p>
-      <p className="text-[10px] text-zinc-700 mt-1 uppercase tracking-tighter">{done ? 'Verified' : 'PDF required'}</p>
+      <p
+        className={`text-xs font-semibold ${
+          isUploaded ? 'text-emerald-500/80' : 'text-zinc-600 group-hover:text-zinc-400'
+        }`}
+      >
+        {label}
+      </p>
+      <p className="mt-2 text-[11px] text-zinc-500 break-all">
+        {fileName ?? 'PDF tanlash uchun bosing'}
+      </p>
+      <p className="text-[10px] text-zinc-700 mt-2 uppercase tracking-tighter">
+        {isUploading ? 'PDF yuklanmoqda' : isUploaded ? 'PDF selected' : 'PDF required'}
+      </p>
+
+      <div className="mt-4 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            openPicker();
+          }}
+          disabled={isUploading}
+          className="inline-flex items-center gap-2 rounded-lg border border-emerald-900/40 bg-emerald-950/20 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-emerald-400 hover:bg-emerald-900/30"
+        >
+          {isUploading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCcw size={12} />}
+          {isUploading ? 'Yuklanmoqda...' : isUploaded ? 'Almashtirish' : 'Yuklash'}
+        </button>
+
+        {isUploaded ? (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onClear();
+            }}
+            disabled={isUploading}
+            className="inline-flex items-center gap-2 rounded-lg border border-red-900/40 bg-red-950/20 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-red-400 hover:bg-red-900/30"
+          >
+            <Trash2 size={12} />
+            O'chirish
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
 
-function FormInput({ label, value, onChange, disabled }: { label: string, value: string, onChange: (value: string) => void, disabled?: boolean }) {
+function ProfileImageField({
+  name,
+  imageUrl,
+  hasPendingFile,
+  onFileSelect,
+  onReset,
+}: {
+  name: string,
+  imageUrl: string,
+  hasPendingFile: boolean,
+  onFileSelect: (file: File | null) => void,
+  onReset: () => void,
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  return (
+    <div className="rounded-3xl border border-zinc-800/50 bg-zinc-900/20 p-6">
+      <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-4">
+          <img
+            src={imageUrl || createAvatarPlaceholder(name)}
+            alt={name}
+            className="h-24 w-24 rounded-3xl border border-zinc-800/60 object-cover shadow-2xl"
+          />
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-zinc-600">Profil rasmi</p>
+            <p className="mt-2 text-sm text-zinc-300">Haqiqiy rasm yuklang, saqlaganda backendga yoziladi.</p>
+            <p className="mt-2 text-[11px] text-zinc-500">JPG, PNG, WEBP yoki GIF. Maksimal 3 MB.</p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*"
+            className="sr-only"
+            onClick={(event) => {
+              event.currentTarget.value = '';
+            }}
+            onChange={(event) => onFileSelect(event.target.files?.[0] ?? null)}
+          />
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="inline-flex items-center gap-2 rounded-2xl border border-emerald-900/40 bg-emerald-950/20 px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-emerald-400 hover:bg-emerald-900/30"
+          >
+            <Upload size={14} />
+            {hasPendingFile ? 'Rasmni almashtirish' : 'Rasm yuklash'}
+          </button>
+          {hasPendingFile ? (
+            <button
+              type="button"
+              onClick={onReset}
+              className="inline-flex items-center gap-2 rounded-2xl border border-red-900/40 bg-red-950/20 px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-red-400 hover:bg-red-900/30"
+            >
+              <Trash2 size={14} />
+              Bekor qilish
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FormInput({
+  label,
+  value,
+  onChange,
+  disabled,
+  placeholder,
+  inputMode,
+  error,
+}: {
+  label: string,
+  value: string,
+  onChange: (value: string) => void,
+  disabled?: boolean,
+  placeholder?: string,
+  inputMode?: InputHTMLAttributes<HTMLInputElement>['inputMode'],
+  error?: string,
+}) {
   return (
     <div className="space-y-2">
       <label className="block text-[10px] font-bold text-zinc-600 uppercase tracking-[0.2em]">{label}</label>
@@ -791,9 +1469,20 @@ function FormInput({ label, value, onChange, disabled }: { label: string, value:
         type="text"
         value={value}
         disabled={disabled}
+        placeholder={placeholder}
+        inputMode={inputMode}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full bg-zinc-900/40 border border-zinc-800/50 rounded-xl px-5 py-4 font-semibold text-zinc-400 focus:ring-1 focus:ring-emerald-500/30 outline-none transition-all disabled:opacity-50"
+        className={`w-full bg-zinc-900/40 border rounded-xl px-5 py-4 font-semibold text-zinc-400 focus:ring-1 outline-none transition-all disabled:opacity-50 ${
+          error
+            ? 'border-red-900/60 focus:ring-red-500/30'
+            : 'border-zinc-800/50 focus:ring-emerald-500/30'
+        }`}
       />
+      {error ? (
+        <p className="text-[11px] text-red-400">{error}</p>
+      ) : placeholder ? (
+        <p className="text-[11px] text-zinc-500">Masalan: {placeholder}</p>
+      ) : null}
     </div>
   );
 }

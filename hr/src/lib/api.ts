@@ -1,4 +1,4 @@
-import { Anomaly, Application, DashboardSummary } from '../types';
+import { Anomaly, Application, DashboardSummary, HrProfile } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000';
 const TOKEN_KEY = 'ethicflow-hr-token';
@@ -13,6 +13,7 @@ export interface HrDashboardResponse {
   summary: DashboardSummary;
   applications: Application[];
   anomalies: Anomaly[];
+  profile: HrProfile;
 }
 
 async function login(force = false) {
@@ -72,6 +73,16 @@ async function requestJson<T>(path: string, init: RequestInit = {}, retry = true
   return response.json() as Promise<T>;
 }
 
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => resolve(String(reader.result ?? ''));
+    reader.onerror = () => reject(new Error("Rasm faylini o'qib bo'lmadi"));
+    reader.readAsDataURL(file);
+  });
+}
+
 async function requestBlob(path: string, retry = true) {
   const token = await login();
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -96,6 +107,23 @@ export function fetchDashboard() {
   return requestJson<HrDashboardResponse>('/api/hr/dashboard');
 }
 
+export async function uploadProfileImage(file: File) {
+  const dataUrl = await readFileAsDataUrl(file);
+  const payload = await requestJson<{ url: string }>(
+    '/api/uploads/profile-image',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        fileName: file.name,
+        mimeType: file.type,
+        contentBase64: dataUrl.split(',')[1] ?? '',
+      }),
+    },
+  );
+
+  return payload.url;
+}
+
 export async function updateApplicationStatus(
   applicationId: string,
   status: Application['status'],
@@ -109,6 +137,18 @@ export async function updateApplicationStatus(
   );
 
   return payload.application;
+}
+
+export async function updateProfile(profile: HrProfile) {
+  const payload = await requestJson<{ profile: HrProfile }>(
+    '/api/hr/profile',
+    {
+      method: 'PUT',
+      body: JSON.stringify(profile),
+    },
+  );
+
+  return payload.profile;
 }
 
 export function downloadApplicationsExport() {

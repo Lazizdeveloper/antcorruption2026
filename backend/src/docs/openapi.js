@@ -136,6 +136,18 @@ export const openApiSpec = {
           message: { type: 'string' },
         },
       },
+      UploadFileRequest: {
+        type: 'object',
+        required: ['fileName', 'contentBase64'],
+        properties: {
+          fileName: { type: 'string', example: 'diploma.pdf' },
+          mimeType: { type: 'string', example: 'application/pdf' },
+          contentBase64: {
+            type: 'string',
+            example: 'JVBERi0xLjQKJcTl8uXr...',
+          },
+        },
+      },
     },
   },
   paths: {
@@ -207,6 +219,42 @@ export const openApiSpec = {
           200: {
             description: 'Current authenticated user',
           },
+        },
+      },
+    },
+    '/api/uploads/profile-image': {
+      post: {
+        tags: ['Uploads'],
+        security: [{ bearerAuth: [] }],
+        summary: 'Upload a profile image',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/UploadFileRequest' },
+            },
+          },
+        },
+        responses: {
+          201: { description: 'Profile image uploaded' },
+        },
+      },
+    },
+    '/api/uploads/application-document': {
+      post: {
+        tags: ['Uploads'],
+        security: [{ bearerAuth: [] }],
+        summary: 'Upload a PDF application document',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/UploadFileRequest' },
+            },
+          },
+        },
+        responses: {
+          201: { description: 'Application document uploaded' },
         },
       },
     },

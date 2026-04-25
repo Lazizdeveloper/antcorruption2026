@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Anomaly, Application, DashboardSummary } from './types';
+import React, { useEffect, useRef, useState } from 'react';
+import { Application, DashboardSummary, HrProfile } from './types';
 import { 
   LayoutDashboard, 
   Users, 
@@ -12,15 +12,28 @@ import {
   ChevronRight,
   TrendingUp,
   Zap,
-  Bell,
   LogOut,
   ShieldAlert,
   Fingerprint,
+  UserCircle,
+  Save,
+  Loader2,
+  Upload,
+  Trash2,
+  FileText,
+  ArrowUpRight,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
 import { format } from 'date-fns';
-import { downloadApplicationsExport, downloadBlob, fetchDashboard, updateApplicationStatus } from './lib/api';
+import {
+  downloadApplicationsExport,
+  downloadBlob,
+  fetchDashboard,
+  uploadProfileImage,
+  updateApplicationStatus,
+  updateProfile,
+} from './lib/api';
 
 // --- Components ---
 
@@ -63,10 +76,150 @@ const StatCard = ({ label, value, trend, subLabel, color = "text-slate-100" }: {
   </div>
 );
 
+type ApplicationFilter = 'all' | 'new_resumes' | 'pending' | 'hired';
+
+const MAX_PROFILE_IMAGE_SIZE_BYTES = 3 * 1024 * 1024;
+const DOCUMENT_TYPE_LABELS: Record<string, string> = {
+  diploma: "Oliy ma'lumot diplomi",
+  certificate: 'Ilmiy unvon / Sertifikat',
+  employment: 'Ish staji (E-Mehnat)',
+  resume: 'Rezyume / CV',
+};
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => resolve(String(reader.result ?? ''));
+    reader.onerror = () => reject(new Error("Rasm faylini o'qib bo'lmadi"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function createAvatarPlaceholder(label: string) {
+  const initials = label
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('') || 'HR';
+
+  return `data:image/svg+xml;utf8,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+      <rect width="96" height="96" rx="48" fill="#0f172a" />
+      <text x="50%" y="53%" dominant-baseline="middle" text-anchor="middle" fill="#10b981" font-family="Arial, sans-serif" font-size="28" font-weight="700">${initials}</text>
+    </svg>`,
+  )}`;
+}
+
+function getDocumentLabel(type: string) {
+  return DOCUMENT_TYPE_LABELS[type] ?? type;
+}
+
+function isViewableDocumentUrl(url?: string) {
+  if (!url) {
+    return false;
+  }
+
+  return url.startsWith('http://') || url.startsWith('https://') || url.startsWith('/');
+}
+
+function isLegacyDocumentUrl(url?: string) {
+  return String(url ?? '').startsWith('uploaded://');
+}
+
+const ProfileInput = ({
+  label,
+  value,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) => (
+  <div className="space-y-2">
+    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{label}</label>
+    <input
+      type="text"
+      value={value}
+      disabled={disabled}
+      onChange={(event) => onChange(event.target.value)}
+      className="w-full rounded border border-slate-800 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-200 outline-none focus:border-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+    />
+  </div>
+);
+
+const ProfileImageField = ({
+  fullName,
+  imageUrl,
+  hasPendingFile,
+  onFileSelect,
+  onReset,
+}: {
+  fullName: string;
+  imageUrl: string;
+  hasPendingFile: boolean;
+  onFileSelect: (file: File | null) => void;
+  onReset: () => void;
+}) => {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  return (
+    <div className="md:col-span-2 rounded border border-slate-800 bg-slate-900/40 p-5">
+      <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-4">
+          <img
+            src={imageUrl || createAvatarPlaceholder(fullName)}
+            alt={fullName}
+            className="h-20 w-20 rounded-full border border-slate-800 object-cover"
+          />
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Profil rasmi</p>
+            <p className="mt-2 text-sm text-slate-300">Yangi rasm saqlangandan keyin sidebar avatari ham yangilanadi.</p>
+            <p className="mt-1 text-[11px] text-slate-500">JPG, PNG, WEBP yoki GIF. Maksimal 3 MB.</p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*"
+            className="sr-only"
+            onClick={(event) => {
+              event.currentTarget.value = '';
+            }}
+            onChange={(event) => onFileSelect(event.target.files?.[0] ?? null)}
+          />
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="inline-flex items-center gap-2 rounded border border-emerald-900 bg-emerald-950/30 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-400 hover:bg-emerald-900/40"
+          >
+            <Upload size={12} />
+            {hasPendingFile ? 'Rasmni almashtirish' : 'Rasm yuklash'}
+          </button>
+          {hasPendingFile ? (
+            <button
+              type="button"
+              onClick={onReset}
+              className="inline-flex items-center gap-2 rounded border border-red-900 bg-red-950/20 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-red-400 hover:bg-red-900/30"
+            >
+              <Trash2 size={12} />
+              Bekor qilish
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'applications' | 'shortlisted' | 'hired_staff' | 'anomalies'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'applications' | 'shortlisted' | 'hired_staff' | 'profile'>('dashboard');
   const [applications, setApplications] = useState<Application[]>([]);
-  const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
   const [summary, setSummary] = useState<DashboardSummary>({
     totalApplications: 0,
     pendingCount: 0,
@@ -75,11 +228,16 @@ export default function App() {
     averageScore: 0,
   });
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterDept, setFilterDept] = useState('Barcha Vazirliklar');
+  const [applicationFilter, setApplicationFilter] = useState<ApplicationFilter>('all');
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
+  const [profileDraft, setProfileDraft] = useState<HrProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [isOffline, setIsOffline] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [exportingReport, setExportingReport] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [pendingProfilePhoto, setPendingProfilePhoto] = useState<File | null>(null);
+  const [savedProfilePhotoUrl, setSavedProfilePhotoUrl] = useState('');
 
   useEffect(() => {
     let isMounted = true;
@@ -97,8 +255,10 @@ export default function App() {
         }
 
         setApplications(dashboard.applications);
-        setAnomalies(dashboard.anomalies);
+        setProfileDraft(dashboard.profile ? { ...dashboard.profile, photoUrl: dashboard.profile.photoUrl ?? '' } : null);
+        setSavedProfilePhotoUrl(dashboard.profile?.photoUrl ?? '');
         setSummary(dashboard.summary);
+        setPendingProfilePhoto(null);
         setIsOffline(false);
         setErrorMessage(null);
       } catch (error) {
@@ -153,7 +313,7 @@ export default function App() {
 
       const refreshedDashboard = await fetchDashboard();
       setApplications(refreshedDashboard.applications);
-      setAnomalies(refreshedDashboard.anomalies);
+      setProfileDraft(refreshedDashboard.profile);
       setSummary(refreshedDashboard.summary);
 
       window.setTimeout(() => setSelectedApplication(null), newStatus === 'hired' || newStatus === 'shortlisted' ? 3000 : 1000);
@@ -165,6 +325,8 @@ export default function App() {
   };
 
   const exportReport = async () => {
+    setExportingReport(true);
+
     try {
       const blob = await downloadApplicationsExport();
       downloadBlob(blob, `shaffof_audit_report_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`);
@@ -172,10 +334,69 @@ export default function App() {
     } catch (error) {
       setIsOffline(true);
       setErrorMessage(error instanceof Error ? error.message : 'Eksport amalga oshmadi');
+    } finally {
+      setExportingReport(false);
     }
   };
 
-  const departments = ['Barcha Vazirliklar', ...Array.from(new Set(applications.map(app => app.department)))];
+  const handleSaveProfile = async () => {
+    if (!profileDraft) {
+      return;
+    }
+
+    setSavingProfile(true);
+
+    try {
+      const nextPhotoUrl = pendingProfilePhoto
+        ? await uploadProfileImage(pendingProfilePhoto)
+        : profileDraft.photoUrl;
+      const updatedProfile = await updateProfile({
+        ...profileDraft,
+        photoUrl: nextPhotoUrl,
+      });
+      setProfileDraft(updatedProfile);
+      setPendingProfilePhoto(null);
+      setSavedProfilePhotoUrl(updatedProfile.photoUrl ?? '');
+      setIsOffline(false);
+      setErrorMessage(null);
+    } catch (error) {
+      setIsOffline(true);
+      setErrorMessage(error instanceof Error ? error.message : 'Profil saqlanmadi');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleProfilePhotoChange = async (file: File | null) => {
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      setErrorMessage('Profil uchun faqat rasm faylini yuklang.');
+      return;
+    }
+
+    if (file.size > MAX_PROFILE_IMAGE_SIZE_BYTES) {
+      setErrorMessage('Profil rasmi 3 MB dan oshmasligi kerak.');
+      return;
+    }
+
+    try {
+      const previewUrl = await readFileAsDataUrl(file);
+      setPendingProfilePhoto(file);
+      setProfileDraft((prev) => (prev ? { ...prev, photoUrl: previewUrl } : prev));
+      setErrorMessage(null);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Rasm faylini o'qib bo'lmadi");
+    }
+  };
+
+  const handleProfilePhotoReset = () => {
+    setPendingProfilePhoto(null);
+    setProfileDraft((prev) => (prev ? { ...prev, photoUrl: savedProfilePhotoUrl } : prev));
+  };
+
   const deptData = Array.from(
     applications.reduce((acc, application) => {
       const bucket = acc.get(application.department) ?? { name: application.department, apps: 0, risk: 0 };
@@ -190,6 +411,32 @@ export default function App() {
     ...value,
     risk: value.apps === 0 ? 0 : Math.round((value.risk / value.apps) * 100),
   }));
+
+  const filteredApplications = applications.filter((app) => {
+    const matchSearch =
+      app.candidateName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      app.position.toLowerCase().includes(searchTerm.toLowerCase());
+
+    if (!matchSearch) {
+      return false;
+    }
+
+    if (applicationFilter === 'pending') {
+      return app.status === 'pending';
+    }
+
+    if (applicationFilter === 'hired') {
+      return app.status === 'hired';
+    }
+
+    if (applicationFilter === 'new_resumes') {
+      const submittedAt = new Date(app.submittedAt).getTime();
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      return submittedAt >= sevenDaysAgo;
+    }
+
+    return true;
+  });
 
   if (loading) return (
     <div className="h-screen bg-slate-950 flex items-center justify-center font-mono">
@@ -211,14 +458,25 @@ export default function App() {
           <SidebarItem icon={Users} label="Arizalar Monitoringi" active={activeTab === 'applications'} onClick={() => setActiveTab('applications')} />
           <SidebarItem icon={TrendingUp} label="Suhbat Bosqichi" active={activeTab === 'shortlisted'} onClick={() => setActiveTab('shortlisted')} />
           <SidebarItem icon={CheckCircle2} label="Ishga qabul qilinganlar" active={activeTab === 'hired_staff'} onClick={() => setActiveTab('hired_staff')} />
-          <SidebarItem icon={Bell} label="Audit Loglari" active={activeTab === 'anomalies'} onClick={() => setActiveTab('anomalies')} />
+          <SidebarItem icon={UserCircle} label="Profil" active={activeTab === 'profile'} onClick={() => setActiveTab('profile')} />
         </nav>
 
         <div className="p-6 border-t border-slate-800">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center font-bold text-xs italic text-slate-950">AK</div>
+            <img
+              src={
+                profileDraft?.photoUrl ||
+                createAvatarPlaceholder(
+                  profileDraft ? `${profileDraft.firstName} ${profileDraft.lastName}` : 'HR Profil',
+                )
+              }
+              alt={profileDraft ? `${profileDraft.firstName} ${profileDraft.lastName}` : 'HR Profil'}
+              className="w-8 h-8 rounded-full border border-slate-800 object-cover"
+            />
             <div className="text-[10px]">
-              <div className="font-semibold text-slate-100">Abbos Karimov</div>
+              <div className="font-semibold text-slate-100">
+                {profileDraft ? `${profileDraft.firstName} ${profileDraft.lastName}` : 'HR Profil'}
+              </div>
               <div className="text-slate-500">Bosh Inspektor (Kadrlar)</div>
             </div>
           </div>
@@ -326,6 +584,13 @@ export default function App() {
                   <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950 shrink-0">
                     <h2 className="text-xs font-bold text-slate-400 uppercase tracking-tighter">Barcha arizalar bazasi</h2>
                     <div className="flex gap-2">
+                      <button
+                        onClick={() => void exportReport()}
+                        disabled={exportingReport}
+                        className="text-[10px] font-bold border border-emerald-900 px-3 py-1.5 rounded bg-emerald-950/30 text-emerald-400 uppercase outline-none hover:bg-emerald-900/40 disabled:opacity-50"
+                      >
+                        {exportingReport ? 'Eksport...' : 'CSV eksport'}
+                      </button>
                        <div className="relative">
                         <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" size={12} />
                         <input 
@@ -337,13 +602,14 @@ export default function App() {
                         />
                       </div>
                       <select 
-                        value={filterDept}
-                        onChange={(e) => setFilterDept(e.target.value)}
+                        value={applicationFilter}
+                        onChange={(e) => setApplicationFilter(e.target.value as ApplicationFilter)}
                         className="text-[10px] font-bold border border-slate-800 px-2 py-1.5 rounded bg-slate-950 text-slate-400 uppercase outline-none focus:border-emerald-500"
                       >
-                        {departments.map((department) => (
-                          <option key={department} value={department}>{department}</option>
-                        ))}
+                        <option value="all">Barcha arizalar</option>
+                        <option value="new_resumes">Yangi rezyumelar</option>
+                        <option value="pending">Pending</option>
+                        <option value="hired">Qabul qilinganlar</option>
                       </select>
                     </div>
                   </div>
@@ -360,15 +626,7 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody className="text-xs divide-y divide-slate-800 font-mono">
-                        {applications
-                          .filter(app => {
-                            const matchSearch = app.candidateName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                                              app.position.toLowerCase().includes(searchTerm.toLowerCase());
-                            const matchDept = filterDept === 'Barcha Vazirliklar' || 
-                                            app.department === filterDept;
-                            return matchSearch && matchDept;
-                          })
-                          .map(app => (
+                        {filteredApplications.map(app => (
                           <tr key={app.id} className="hover:bg-slate-800 transition-colors">
                             <td className="p-3 font-bold">
                                <span className="blur-[6px]">{app.candidateName}</span>
@@ -396,7 +654,7 @@ export default function App() {
                     </table>
                   </div>
                   <div className="p-3 bg-slate-950 border-t border-slate-800 flex justify-between text-[10px] font-bold text-slate-600 uppercase tracking-widest shrink-0">
-                    <div>Jonli ro'yxat • Jami {applications.length} nomzod</div>
+                    <div>Jonli ro'yxat • Jami {filteredApplications.length} nomzod</div>
                     <div className="flex gap-4">
                       <span className="flex items-center gap-1"><Fingerprint size={10} /> Hash Verified</span>
                       <span className="flex items-center gap-1 text-emerald-600"><Zap size={10} /> Live Monitoring On</span>
@@ -508,48 +766,75 @@ export default function App() {
               </section>
           )}
 
-          {activeTab === 'anomalies' && (
-             <section className="flex-1 px-4 pb-4 overflow-hidden flex flex-col">
-                <div className="bg-slate-900 border border-slate-800 rounded shadow-sm h-full flex flex-col overflow-hidden">
-                  <div className="p-4 border-b border-slate-800 bg-slate-950 shrink-0">
-                    <h2 className="text-xs font-bold text-emerald-400 uppercase tracking-tighter">Tizim Audit Logi va Anomaliyalar</h2>
+          {activeTab === 'profile' && profileDraft && (
+            <section className="flex-1 px-4 pb-4 overflow-hidden flex flex-col">
+              <div className="bg-slate-900 border border-slate-800 rounded shadow-sm h-full flex flex-col overflow-hidden">
+                <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950 shrink-0">
+                  <div>
+                    <h2 className="text-xs font-bold text-emerald-400 uppercase tracking-tighter">HR Profil</h2>
+                    <p className="text-[10px] text-slate-500 mt-1">Kadrlar bo'limi foydalanuvchi ma'lumotlari</p>
                   </div>
-                  <div className="flex-1 overflow-auto p-4 space-y-3 font-mono text-xs">
-                    {anomalies.length > 0 ? anomalies.map(anom => (
-                       <div key={anom.id} className="p-4 border border-slate-800 rounded bg-slate-950/50 flex items-start gap-4">
-                          <div className={cn("px-2 py-1 rounded text-[10px] font-bold text-white", anom.severity === 'high' ? "bg-red-700" : "bg-amber-600")}>
-                             {anom.type}
-                          </div>
-                          <div>
-                             <div className="font-bold text-slate-300 border-b border-slate-800 pb-1 mb-2 tracking-tighter">CRITICAL EVENT DETECTED: {anom.id.toUpperCase()}</div>
-                             <p className="text-slate-500 italic">"{anom.message}"</p>
-                             <div className="mt-2 text-[10px] text-slate-600">AUDITOR_TIMESTAMP: {anom.timestamp ? format(new Date(anom.timestamp), 'yyyy-MM-dd HH:mm:ss') : 'LIVE'}</div>
-                          </div>
-                       </div>
-                    )) : (
-                      <React.Fragment key="mock-anomalies-list">
-                        <div key="page-anom-1" className="p-4 border border-slate-800 rounded bg-slate-950/50 flex items-start gap-4">
-                          <div className="px-2 py-1 rounded text-[10px] font-bold text-white bg-red-700">HIGH_RISK</div>
-                          <div>
-                             <div className="font-bold text-slate-300 border-b border-slate-800 pb-1 mb-2 tracking-tighter">CRITICAL EVENT DETECTED: DB-9921</div>
-                             <p className="text-slate-500 italic">"G'ayrat Husanov (ID: 442) balli past bo'lishiga qaramay statusi kutilmaganda 'Hired' ga o'zgardi."</p>
-                             <div className="mt-2 text-[10px] text-slate-600">AUDITOR_TIMESTAMP: 2025-04-24 14:22:10</div>
-                          </div>
-                        </div>
-                        <div key="page-anom-2" className="p-4 border border-slate-800 rounded bg-slate-950/50 flex items-start gap-4">
-                          <div className="px-2 py-1 rounded text-[10px] font-bold text-white bg-amber-600">CONFLICT</div>
-                          <div>
-                             <div className="font-bold text-slate-300 border-b border-slate-800 pb-1 mb-2 tracking-tighter">RECOGNITION EVENT: CF-0012</div>
-                             <p className="text-slate-500 italic">"Nomzod Malika Oripova va HR menejeri orasida qarindoshlik aloqalari aniqlandi."</p>
-                             <div className="mt-2 text-[10px] text-slate-600">AUDITOR_TIMESTAMP: 2025-04-25 09:15:44</div>
-                          </div>
-                        </div>
-                      </React.Fragment>
-                    )}
+                  <button
+                    onClick={() => void handleSaveProfile()}
+                    disabled={savingProfile}
+                    className="inline-flex items-center gap-2 rounded bg-emerald-600 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-950 hover:bg-emerald-500 disabled:opacity-60"
+                  >
+                    {savingProfile ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                    {savingProfile ? 'Saqlanmoqda...' : 'Saqlash'}
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-auto p-6 bg-slate-950">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl">
+                    <ProfileImageField
+                      fullName={`${profileDraft.firstName} ${profileDraft.lastName}`}
+                      imageUrl={profileDraft.photoUrl}
+                      hasPendingFile={Boolean(pendingProfilePhoto)}
+                      onFileSelect={handleProfilePhotoChange}
+                      onReset={handleProfilePhotoReset}
+                    />
+                    <ProfileInput
+                      label="Ismi"
+                      value={profileDraft.firstName}
+                      onChange={(value) => setProfileDraft((prev) => prev ? { ...prev, firstName: value } : prev)}
+                    />
+                    <ProfileInput
+                      label="Familiyasi"
+                      value={profileDraft.lastName}
+                      onChange={(value) => setProfileDraft((prev) => prev ? { ...prev, lastName: value } : prev)}
+                    />
+                    <ProfileInput
+                      label="Otasining ismi"
+                      value={profileDraft.middleName}
+                      onChange={(value) => setProfileDraft((prev) => prev ? { ...prev, middleName: value } : prev)}
+                    />
+                    <ProfileInput
+                      label="Telefon"
+                      value={profileDraft.phone}
+                      onChange={(value) => setProfileDraft((prev) => prev ? { ...prev, phone: value } : prev)}
+                    />
+                    <ProfileInput
+                      label="Email"
+                      value={profileDraft.email}
+                      disabled
+                      onChange={() => {}}
+                    />
+                    <ProfileInput
+                      label="Passport raqami"
+                      value={profileDraft.passportNumber}
+                      onChange={(value) => setProfileDraft((prev) => prev ? { ...prev, passportNumber: value.toUpperCase() } : prev)}
+                    />
+                    <ProfileInput
+                      label="JSHSHIR / PINFL"
+                      value={profileDraft.passportPinfl}
+                      onChange={(value) => setProfileDraft((prev) => prev ? { ...prev, passportPinfl: value } : prev)}
+                    />
                   </div>
                 </div>
-             </section>
+              </div>
+            </section>
           )}
+
         </div>
 
         {/* System Footer Bar */}
@@ -641,6 +926,59 @@ export default function App() {
                         </div>
                      </section>
                   )}
+
+                  <section className="space-y-4">
+                     <div className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-2">
+                        <FileText size={12} /> Ko'rinadigan hujjatlar
+                     </div>
+                     <div className="p-4 border border-slate-800 space-y-3 bg-slate-950/50">
+                        <div className="rounded border border-amber-900/30 bg-amber-950/10 px-3 py-2 text-[10px] uppercase tracking-widest text-amber-400">
+                          Fuqarolik pasporti HR uchun yashirilgan.
+                        </div>
+
+                        {selectedApplication.documents.length > 0 ? (
+                          selectedApplication.documents.map((document, index) => (
+                            <div
+                              key={`${document.type}-${document.name}-${index}`}
+                              className="flex items-center justify-between gap-3 rounded border border-slate-800 bg-slate-950 px-4 py-3"
+                            >
+                              <div className="min-w-0">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                                  {getDocumentLabel(document.type)}
+                                </p>
+                                <p className="mt-1 truncate text-xs font-semibold text-slate-200">
+                                  {document.name}
+                                </p>
+                              </div>
+
+                              {isViewableDocumentUrl(document.url) ? (
+                                <a
+                                  href={document.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex shrink-0 items-center gap-2 rounded border border-emerald-900 bg-emerald-950/20 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-400 hover:bg-emerald-900/30"
+                                >
+                                  Ko'rish
+                                  <ArrowUpRight size={12} />
+                                </a>
+                              ) : isLegacyDocumentUrl(document.url) ? (
+                                <span className="shrink-0 rounded border border-amber-900/40 bg-amber-950/20 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-amber-400">
+                                  Qayta yuklash kerak
+                                </span>
+                              ) : (
+                                <span className="shrink-0 rounded border border-slate-800 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                                  Yuklangan
+                                </span>
+                              )}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="rounded border border-slate-800 bg-slate-950 px-4 py-6 text-center text-[11px] uppercase tracking-widest text-slate-500">
+                            HR uchun ko'rinadigan hujjatlar topilmadi.
+                          </div>
+                        )}
+                     </div>
+                  </section>
 
                   <section className="space-y-4">
                      <div className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-2">

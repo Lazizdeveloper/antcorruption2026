@@ -9,11 +9,75 @@ import { pool, query } from '../db/pool.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { groupVacancies } from '../utils/formatters.js';
 import { HttpError } from '../utils/httpError.js';
-import { ensureFields } from '../utils/validation.js';
+import { deleteLocalUploadFromUrl } from '../utils/uploads.js';
+import {
+  ensureFields,
+  isValidPhoneNumber,
+  isValidTelegramUsername,
+} from '../utils/validation.js';
 
 const router = express.Router();
 
 router.use(authenticate, requireRoles('candidate'));
+
+const REQUIRED_DOCUMENT_TYPES = ['diploma', 'passport', 'certificate', 'employment'];
+
+function normalizeDocuments(documents) {
+  return documents.map((document) => ({
+    name: String(document?.name ?? '').trim(),
+    type: String(document?.type ?? '').trim(),
+    url: String(document?.url ?? '').trim(),
+    mimeType: document?.mimeType ? String(document.mimeType).trim() : undefined,
+    sizeKb:
+      document?.sizeKb === undefined || document?.sizeKb === null
+        ? undefined
+        : Number(document.sizeKb),
+  }));
+}
+
+function validateDocuments(documents) {
+  if (!Array.isArray(documents) || documents.length === 0) {
+    throw new HttpError(400, "Majburiy hujjatlarni yuklang: diplom, pasport, sertifikat va ish staji PDF.");
+  }
+
+  const normalizedDocuments = normalizeDocuments(documents);
+  const missingDocumentTypes = REQUIRED_DOCUMENT_TYPES.filter(
+    (documentType) => !normalizedDocuments.some((document) => document.type === documentType),
+  );
+
+  if (missingDocumentTypes.length > 0) {
+    throw new HttpError(400, "Majburiy hujjatlarni yuklang: diplom, pasport, sertifikat va ish staji PDF.");
+  }
+
+  const hasInvalidDocument = normalizedDocuments.some((document) => {
+    const looksLikePdf = document.name.toLowerCase().endsWith('.pdf');
+    const mimeType = document.mimeType?.toLowerCase();
+
+    return !document.name || !document.type || !document.url || (!looksLikePdf && mimeType !== 'application/pdf');
+  });
+
+  if (hasInvalidDocument) {
+    throw new HttpError(400, "Har bir hujjat uchun to'g'ri PDF fayl tanlang.");
+  }
+
+  return normalizedDocuments;
+}
+
+async function validateVacancySelection(department, position) {
+  const { rows } = await query(
+    `
+      SELECT 1
+      FROM vacancies
+      WHERE department = $1 AND position = $2 AND is_active = TRUE
+      LIMIT 1
+    `,
+    [department, position],
+  );
+
+  if (rows.length === 0) {
+    throw new HttpError(400, "Tanlangan vazirlik va vakansiya mos kelmadi yoki faol emas.");
+  }
+}
 
 async function getProfileAndUser(userId) {
   const { rows } = await query(
@@ -21,7 +85,8 @@ async function getProfileAndUser(userId) {
       SELECT
         cp.*,
         u.email,
-        u.phone AS user_phone
+        u.phone AS user_phone,
+        u.avatar_url AS user_avatar_url
       FROM candidate_profiles cp
       INNER JOIN users u ON u.id = cp.user_id
       WHERE cp.user_id = $1
@@ -105,6 +170,7 @@ router.get(
         {
           email: profileRow.email,
           phone: profileRow.user_phone,
+          avatarUrl: profileRow.user_avatar_url,
         },
       ),
       application: latestApplication,
@@ -123,20 +189,35 @@ router.put(
   '/profile',
   asyncHandler(async (req, res) => {
     const client = await pool.connect();
+    let previousPhotoUrl = '';
 
     try {
       await client.query('BEGIN');
 
       const profile = await getProfileAndUser(req.user.id);
       const fullName = `${req.body.name ?? profile.first_name} ${req.body.surname ?? profile.last_name}`.trim();
+      const nextPhotoUrl = req.body.photoUrl ?? profile.photo_url ?? profile.user_avatar_url ?? null;
+      const nextPhone = req.body.phone !== undefined
+        ? String(req.body.phone).trim()
+        : (profile.phone ?? req.user.phone);
+      previousPhotoUrl = profile.photo_url ?? profile.user_avatar_url ?? '';
+
+      if (!isValidPhoneNumber(nextPhone)) {
+        throw new HttpError(400, "Telefon raqamini to'g'ri kiriting. Masalan: +998901234567.");
+      }
 
       await client.query(
         `
           UPDATE users
-          SET full_name = $1, phone = $2, updated_at = NOW()
-          WHERE id = $3
+          SET full_name = $1, phone = $2, avatar_url = $3, updated_at = NOW()
+          WHERE id = $4
         `,
-        [fullName, req.body.phone ?? profile.phone ?? req.user.phone, req.user.id],
+        [
+          fullName,
+          nextPhone,
+          nextPhotoUrl,
+          req.user.id,
+        ],
       );
 
       const { rows } = await client.query(
@@ -157,10 +238,10 @@ router.put(
         [
           req.body.name ?? profile.first_name,
           req.body.surname ?? profile.last_name,
-          req.body.gender ?? profile.gender,
+          profile.gender,
           req.body.birthPlace ?? profile.birth_place,
-          req.body.photoUrl ?? profile.photo_url,
-          req.body.phone ?? profile.phone,
+          nextPhotoUrl,
+          nextPhone,
           JSON.stringify(Array.isArray(req.body.connections) ? req.body.connections : profile.connections),
           req.user.id,
         ],
@@ -168,10 +249,15 @@ router.put(
 
       await client.query('COMMIT');
 
+      if (nextPhotoUrl && nextPhotoUrl !== previousPhotoUrl) {
+        await deleteLocalUploadFromUrl(previousPhotoUrl);
+      }
+
       res.json({
         candidate: mapCandidateProfile(rows[0], {
           email: req.user.email,
-          phone: req.body.phone ?? profile.user_phone,
+          phone: nextPhone,
+          avatarUrl: nextPhotoUrl,
         }),
       });
     } catch (error) {
@@ -205,7 +291,22 @@ router.get(
 router.post(
   '/applications',
   asyncHandler(async (req, res) => {
-    ensureFields(req.body, ['position', 'department']);
+    ensureFields(req.body, ['position', 'department', 'phone', 'telegram']);
+
+    const department = String(req.body.department).trim();
+    const position = String(req.body.position).trim();
+    const phone = String(req.body.phone).trim();
+    const telegram = String(req.body.telegram).trim();
+
+    if (!isValidPhoneNumber(phone)) {
+      throw new HttpError(400, "Telefon raqamini to'g'ri kiriting. Masalan: +998901234567.");
+    }
+
+    if (!isValidTelegramUsername(req.body.telegram)) {
+      throw new HttpError(400, "Telegram username'ni to'g'ri kiriting. Masalan: @username.");
+    }
+
+    await validateVacancySelection(department, position);
 
     const profileRow = await getProfileAndUser(req.user.id);
     const maskedData = req.body.maskedData ?? {
@@ -214,7 +315,7 @@ router.post(
       education: req.body.education ?? '',
       summary: req.body.summary ?? '',
     };
-    const documents = Array.isArray(req.body.documents) ? req.body.documents : [];
+    const documents = validateDocuments(req.body.documents);
     const connections = Array.isArray(profileRow.connections) ? profileRow.connections : [];
     const conflictDetected = connections.length > 0;
     const matchPercentage = Math.min(
@@ -266,12 +367,12 @@ router.post(
         profileRow.candidate_code,
         `${profileRow.first_name} ${profileRow.last_name}`.trim(),
         req.user.email,
-        req.body.position,
-        req.body.department,
+        position,
+        department,
         conflictDetected,
         conflictDetected ? String(connections[0]) : null,
-        req.body.phone ?? profileRow.phone ?? req.user.phone,
-        req.body.telegram ?? null,
+        phone,
+        telegram,
         JSON.stringify(maskedData),
         JSON.stringify(documents),
         matchPercentage,

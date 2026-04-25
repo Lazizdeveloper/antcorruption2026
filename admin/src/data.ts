@@ -95,6 +95,9 @@ export const newsItems: NewsItem[] = [
 export const candidates: Candidate[] = [
   { 
     id: 'CND-101', 
+    candidateName: 'Ali Valiyev',
+    position: 'Frontend Developer',
+    status: 'pending',
     score: 92, 
     conflictRisk: 'Low', 
     department: 'G‘aznachilik boshqarmasi',
@@ -104,6 +107,9 @@ export const candidates: Candidate[] = [
   },
   { 
     id: 'CND-102', 
+    candidateName: "Zilola G'aniyeva",
+    position: 'HR Manager',
+    status: 'shortlisted',
     score: 88, 
     conflictRisk: 'Low', 
     department: 'Byudjet siyosati departamenti',
@@ -113,6 +119,9 @@ export const candidates: Candidate[] = [
   },
   { 
     id: 'CND-103', 
+    candidateName: 'Sardor Ahmedov',
+    position: 'Backend Developer',
+    status: 'rejected',
     score: 42, 
     conflictRisk: 'High', 
     conflictDetails: 'Nomzod G‘aznachilik boshlig‘ining jiyani (Yaqin qarindosh)', 
@@ -123,6 +132,9 @@ export const candidates: Candidate[] = [
   },
   { 
     id: 'CND-104', 
+    candidateName: 'Nodira Toshmatova',
+    position: 'Mobile Developer',
+    status: 'reviewing',
     score: 85, 
     conflictRisk: 'Low', 
     department: 'Xodimlar sifatida muvofiqlikni baholash (Agentlik)',
@@ -132,6 +144,9 @@ export const candidates: Candidate[] = [
   },
   { 
     id: 'CND-105', 
+    candidateName: 'Dildora Yo`ldosheva',
+    position: 'Data Scientist',
+    status: 'rejected',
     score: 38, 
     conflictRisk: 'High', 
     conflictDetails: 'Bo‘lim boshlig‘ining sobiq biznes hamkori (Affillangan)', 

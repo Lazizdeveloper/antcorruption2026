@@ -10,6 +10,7 @@ const migrationStatements = [
       role TEXT NOT NULL CHECK (role IN ('admin', 'hr', 'candidate')),
       department TEXT,
       phone TEXT,
+      avatar_url TEXT,
       is_active BOOLEAN NOT NULL DEFAULT TRUE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -27,6 +28,19 @@ const migrationStatements = [
       photo_url TEXT,
       phone TEXT,
       connections JSONB NOT NULL DEFAULT '[]'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS hr_profiles (
+      id UUID PRIMARY KEY,
+      user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      first_name TEXT NOT NULL,
+      last_name TEXT NOT NULL,
+      middle_name TEXT NOT NULL,
+      passport_number TEXT NOT NULL,
+      passport_pinfl TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
@@ -155,6 +169,14 @@ const migrationStatements = [
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `,
+  `
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS avatar_url TEXT
+  `,
+  `
+    ALTER TABLE integrity_reports
+    ADD COLUMN IF NOT EXISTS details JSONB NOT NULL DEFAULT '{}'::jsonb
   `,
   `CREATE INDEX IF NOT EXISTS idx_applications_review_status ON applications(review_status)`,
   `CREATE INDEX IF NOT EXISTS idx_applications_candidate_user_id ON applications(candidate_user_id)`,

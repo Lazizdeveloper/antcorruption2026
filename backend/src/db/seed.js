@@ -7,6 +7,7 @@ import {
   seedCandidateProfiles,
   seedCases,
   seedExternalProjects,
+  seedHrProfiles,
   seedIntegrityReports,
   seedMeritQuestions,
   seedNewsItems,
@@ -116,6 +117,47 @@ export async function runSeed() {
       );
 
       profileIdsByEmail.set(email, rows[0].id);
+    }
+
+    for (const profile of seedHrProfiles) {
+      const email = normalizeEmail(profile.email);
+      const userId = userIdsByEmail.get(email);
+
+      if (!userId) {
+        continue;
+      }
+
+      await client.query(
+        `
+          INSERT INTO hr_profiles (
+            id,
+            user_id,
+            first_name,
+            last_name,
+            middle_name,
+            passport_number,
+            passport_pinfl
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          ON CONFLICT (user_id)
+          DO UPDATE SET
+            first_name = EXCLUDED.first_name,
+            last_name = EXCLUDED.last_name,
+            middle_name = EXCLUDED.middle_name,
+            passport_number = EXCLUDED.passport_number,
+            passport_pinfl = EXCLUDED.passport_pinfl,
+            updated_at = NOW()
+        `,
+        [
+          randomUUID(),
+          userId,
+          profile.firstName,
+          profile.lastName,
+          profile.middleName,
+          profile.passportNumber,
+          profile.passportPinfl,
+        ],
+      );
     }
 
     for (const vacancy of seedVacancies) {

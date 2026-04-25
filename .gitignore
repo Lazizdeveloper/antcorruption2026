@@ -3,3 +3,4 @@
 *.run.pid
 Thumbs.db
 .DS_Store
+backend/uploads/

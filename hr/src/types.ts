@@ -49,3 +49,15 @@ export interface DashboardSummary {
   hiredCount: number;
   averageScore: number;
 }
+
+export interface HrProfile {
+  id: string;
+  firstName: string;
+  lastName: string;
+  middleName: string;
+  email: string;
+  phone: string;
+  photoUrl: string;
+  passportNumber: string;
+  passportPinfl: string;
+}

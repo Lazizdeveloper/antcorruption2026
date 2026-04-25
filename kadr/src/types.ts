@@ -1,5 +1,13 @@
 export type ApplicationStatus = 'submitted' | 'blind_review' | 'merit_test' | 'ranking' | 'completed';
 
+export interface ApplicationDocument {
+  name: string;
+  type: string;
+  url: string;
+  mimeType?: string;
+  sizeKb?: number;
+}
+
 export interface Candidate {
   id: string;
   name: string;
@@ -19,7 +27,7 @@ export interface Application {
   position: string;
   department: string;
   status: ApplicationStatus;
-  documents: { name: string; type: string; url: string }[];
+  documents: ApplicationDocument[];
   meritScore: number;
   score?: number;
   reviewStatus?: 'pending' | 'reviewing' | 'shortlisted' | 'rejected' | 'hired';

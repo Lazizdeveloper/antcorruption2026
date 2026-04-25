@@ -60,6 +60,8 @@ Node.js + PostgreSQL backend for the `admin`, `hr`, and `kadr` panels.
 - `GET /api/admin/dashboard`
 - `GET /api/hr/dashboard`
 - `GET /api/candidate/dashboard`
+- `POST /api/uploads/profile-image`
+- `POST /api/uploads/application-document`
 - `POST /api/candidate/applications`
 - `POST /api/candidate/applications/:id/merit-test/submit`
 - `PATCH /api/hr/applications/:id/status`

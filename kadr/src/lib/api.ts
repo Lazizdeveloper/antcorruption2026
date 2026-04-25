@@ -1,5 +1,6 @@
 import {
   Application,
+  ApplicationDocument,
   Candidate,
   MeritQuestion,
   RankingPreviewRow,
@@ -80,8 +81,52 @@ async function requestJson<T>(path: string, init: RequestInit = {}, retry = true
   return response.json() as Promise<T>;
 }
 
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => resolve(String(reader.result ?? ''));
+    reader.onerror = () => reject(new Error('Rasm faylini o‘qib bo‘lmadi'));
+    reader.readAsDataURL(file);
+  });
+}
+
 export function fetchDashboard() {
   return requestJson<CandidateDashboardResponse>('/api/candidate/dashboard');
+}
+
+export async function uploadProfileImage(file: File) {
+  const dataUrl = await readFileAsDataUrl(file);
+  const payload = await requestJson<{ url: string }>(
+    '/api/uploads/profile-image',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        fileName: file.name,
+        mimeType: file.type,
+        contentBase64: dataUrl.split(',')[1] ?? '',
+      }),
+    },
+  );
+
+  return payload.url;
+}
+
+export async function uploadApplicationDocument(file: File) {
+  const dataUrl = await readFileAsDataUrl(file);
+  const payload = await requestJson<{ url: string; mimeType: string; sizeKb: number }>(
+    '/api/uploads/application-document',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        fileName: file.name,
+        mimeType: file.type,
+        contentBase64: dataUrl.split(',')[1] ?? '',
+      }),
+    },
+  );
+
+  return payload;
 }
 
 export async function updateProfile(candidate: Partial<Candidate>) {
@@ -101,7 +146,7 @@ export async function createApplication(payload: {
   department: string;
   phone?: string;
   telegram?: string;
-  documents: { name: string; type: string; url: string }[];
+  documents: ApplicationDocument[];
   maskedData: {
     skills: string[];
     experience: string;

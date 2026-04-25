@@ -45,9 +45,27 @@ export function mapApplicationRow(row) {
   };
 }
 
+export function mapHrApplicationRow(row) {
+  const application = mapApplicationRow(row);
+
+  return {
+    ...application,
+    documents: Array.isArray(application.documents)
+      ? application.documents.filter((document) => document?.type !== 'passport')
+      : [],
+  };
+}
+
 export function mapCandidateCard(row) {
+  const alertDetails = row.alert_report_details ?? {};
+  const alertCandidate = alertDetails.candidate ?? {};
+  const alertHr = alertDetails.hr ?? null;
+
   return {
     id: row.candidate_code,
+    candidateName: row.candidate_name,
+    position: row.position,
+    status: row.review_status,
     score: row.score,
     conflictRisk: row.conflict_detected ? 'High' : 'Low',
     conflictDetails: row.conflict_details,
@@ -55,6 +73,42 @@ export function mapCandidateCard(row) {
     matchPercentage: row.match_percentage,
     interviewTime: row.interview_time,
     proctoringRisk: row.proctoring_risk,
+    hiringAlert: row.alert_report_id
+      ? {
+          id: row.alert_report_id,
+          title: row.alert_report_title,
+          message: row.alert_report_message,
+          createdAt: row.alert_report_created_at,
+          organization: alertDetails.organization ?? row.department,
+          reasonSummary: alertDetails.reasonSummary ?? null,
+          riskFlags: alertDetails.riskFlags ?? null,
+          aiScore:
+            alertDetails.aiScore === undefined || alertDetails.aiScore === null
+              ? row.score
+              : Number(alertDetails.aiScore),
+          auditStatus: alertDetails.auditStatus ?? (row.conflict_detected ? 'CONFLICT' : 'CLEAN'),
+          hr: alertHr
+            ? {
+                fullName: alertHr.fullName ?? null,
+                firstName: alertHr.firstName ?? null,
+                lastName: alertHr.lastName ?? null,
+                middleName: alertHr.middleName ?? null,
+                email: alertHr.email ?? null,
+                phone: alertHr.phone ?? null,
+              }
+            : null,
+          candidate: {
+            fullName: alertCandidate.fullName ?? row.candidate_name,
+            code: alertCandidate.code ?? row.candidate_code,
+            email: alertCandidate.email ?? row.candidate_email,
+            phone: alertCandidate.phone ?? row.phone ?? null,
+            telegram: alertCandidate.telegram ?? row.telegram ?? null,
+            position: alertCandidate.position ?? row.position,
+            department: alertCandidate.department ?? row.department,
+            conflictDetails: alertCandidate.conflictDetails ?? row.conflict_details,
+          },
+        }
+      : null,
   };
 }
 
@@ -77,10 +131,35 @@ export function mapCandidateProfile(row, user) {
     surname: row.last_name,
     gender: row.gender,
     birthPlace: row.birth_place,
-    photoUrl: row.photo_url,
+    photoUrl: row.photo_url ?? user.avatarUrl ?? '',
     email: user.email,
     phone: row.phone || user.phone,
     connections: row.connections ?? [],
+  };
+}
+
+export function mapHrProfile(row, user) {
+  return {
+    id: row.id,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    middleName: row.middle_name,
+    email: user.email,
+    phone: user.phone,
+    photoUrl: user.avatarUrl ?? '',
+    passportNumber: row.passport_number,
+    passportPinfl: row.passport_pinfl,
+  };
+}
+
+export function mapAdminProfile(row) {
+  return {
+    id: row.id,
+    fullName: row.full_name,
+    email: row.email,
+    phone: row.phone ?? '',
+    department: row.department ?? '',
+    photoUrl: row.avatar_url ?? '',
   };
 }
 
@@ -126,5 +205,36 @@ export function mapNewsRow(row) {
     published_date: row.published_date,
     summary: row.summary,
     image_url: row.image_url,
+  };
+}
+
+export function mapIntegrityReport(row) {
+  const details = row.details ?? {};
+  const hr = details.hr ?? null;
+
+  return {
+    id: row.id,
+    reportType: row.report_type,
+    referenceId: row.reference_id,
+    title: row.title,
+    message: row.message,
+    severity: row.severity,
+    status: row.status,
+    createdBy: row.created_by_name ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    details: {
+      ...details,
+      hr: hr
+        ? {
+            fullName: hr.fullName ?? null,
+            firstName: hr.firstName ?? null,
+            lastName: hr.lastName ?? null,
+            middleName: hr.middleName ?? null,
+            email: hr.email ?? null,
+            phone: hr.phone ?? null,
+          }
+        : null,
+    },
   };
 }
