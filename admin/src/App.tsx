@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { 
   LayoutDashboard, 
   Users, 
@@ -28,9 +28,6 @@ import {
   Target,
   PieChart,
   Building,
-  Save,
-  Upload,
-  Trash2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -43,8 +40,6 @@ import {
   ResponsiveContainer,
   LineChart,
   Line,
-  Cell,
-  ReferenceLine
 } from 'recharts';
 import {
   createReport,
@@ -81,6 +76,9 @@ import {
 import { CaseDetail } from './components/CaseDetail';
 import { PersonDetail } from './components/PersonDetail';
 import { SelectionReport } from './components/SelectionReport';
+import { StatCard } from './components/StatCard';
+import { PriceComparison } from './components/PriceComparison';
+import { AdminProfileModal } from './components/AdminProfileModal';
 
 const MAX_PROFILE_IMAGE_SIZE_BYTES = 3 * 1024 * 1024;
 
@@ -108,212 +106,6 @@ function createAvatarPlaceholder(label: string) {
       <text x="50%" y="53%" dominant-baseline="middle" text-anchor="middle" fill="#d4af37" font-family="Arial, sans-serif" font-size="28" font-weight="700">${initials}</text>
     </svg>`,
   )}`;
-}
-
-const PriceComparison = ({ data }: { data: any[] }) => (
-  <div className="glass-panel p-6 rounded-lg border border-zinc-800">
-    <div className="flex items-center justify-between mb-6">
-      <div>
-        <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold">Narx Anomaliyasi Tahlili</h4>
-        <p className="text-[9px] text-zinc-600 mt-1 uppercase tracking-widest italic">Kritik chegara: +30%</p>
-      </div>
-      <PieChart size={16} className="text-gold opacity-50" />
-    </div>
-    <div className="h-64">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-          <XAxis dataKey="name" stroke="#52525b" fontSize={10} tickLine={false} axisLine={false} />
-          <YAxis stroke="#52525b" fontSize={10} tickLine={false} axisLine={false} />
-          <Tooltip 
-            contentStyle={{ backgroundColor: '#09090b', border: '1px solid #27272a', fontSize: '10px' }}
-            itemStyle={{ color: '#d4d4d8' }}
-          />
-          <ReferenceLine y={100} stroke="#ef4444" strokeDasharray="3 3" label={{ position: 'top', value: '30% Anomaliya', fill: '#ef4444', fontSize: '8px' }} />
-          <Bar dataKey="price" radius={[2, 2, 0, 0]}>
-            {data.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={entry.price > 100 ? '#ef4444' : '#ca8a04'} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-    <div className="mt-4 p-3 bg-red-950/10 border border-red-900/30 rounded flex items-start gap-3">
-       <AlertCircle size={14} className="text-red-500 shrink-0 mt-0.5" />
-       <p className="text-[9px] text-zinc-400 italic">
-         Qizil ustunlar bozor o'rtacha narxidan 30% dan ortiq qimmat takliflarni bildiradi. Bu korrupsion kelishuv alomati bo'lishi mumkin.
-       </p>
-    </div>
-  </div>
-);
-
-// Components
-
-const StatCard = ({ title, value, icon: Icon, color, trend }: { title: string, value: string | number, icon: any, color: string, trend?: string }) => (
-  <motion.div 
-    whileHover={{ y: -5 }}
-    className="glass-panel p-4 sm:p-6 rounded-xl stat-card flex flex-col"
-  >
-    <div className="flex items-start justify-between mb-3 sm:mb-4">
-      <p className="text-[9px] sm:text-[10px] uppercase tracking-widest text-zinc-500">{title}</p>
-      <Icon size={16} className="text-zinc-500 sm:w-[18px] sm:h-[18px]" />
-    </div>
-    <h3 className="text-2xl sm:text-3xl serif-title font-medium text-zinc-100">{value}</h3>
-    {trend && <p className="text-[9px] sm:text-[10px] mt-2 text-zinc-400">{trend}</p>}
-  </motion.div>
-);
-
-function AdminProfileModal({
-  profile,
-  saving,
-  hasPendingFile,
-  onClose,
-  onSave,
-  onProfileChange,
-  onFileSelect,
-  onResetPhoto,
-}: {
-  profile: AdminProfile;
-  saving: boolean;
-  hasPendingFile: boolean;
-  onClose: () => void;
-  onSave: () => void;
-  onProfileChange: (patch: Partial<AdminProfile>) => void;
-  onFileSelect: (file: File | null) => void;
-  onResetPhoto: () => void;
-}) {
-  const inputRef = useRef<HTMLInputElement | null>(null);
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20, scale: 0.98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: 20, scale: 0.98 }}
-      className="fixed inset-0 z-50 flex items-center justify-center px-4"
-    >
-      <div className="w-full max-w-2xl rounded-3xl border border-zinc-800 bg-zinc-950 p-8 shadow-2xl">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.3em] text-gold/70 font-bold">Admin profil</p>
-            <h3 className="mt-3 text-2xl serif-title text-zinc-100">Shaxsiy ma'lumotlar</h3>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full border border-zinc-800 p-2 text-zinc-500 hover:text-zinc-200"
-          >
-            <X size={16} />
-          </button>
-        </div>
-
-        <div className="mt-8 rounded-3xl border border-zinc-800 bg-zinc-900/30 p-6">
-          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-4">
-              <img
-                src={profile.photoUrl || createAvatarPlaceholder(profile.fullName)}
-                alt={profile.fullName}
-                className="h-24 w-24 rounded-3xl border border-zinc-800 object-cover"
-              />
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-500">Profil rasmi</p>
-                <p className="mt-2 text-sm text-zinc-300">Saqlangandan keyin sidebar kartadagi avatar ham yangilanadi.</p>
-                <p className="mt-1 text-[11px] text-zinc-500">JPG, PNG, WEBP yoki GIF. Maksimal 3 MB.</p>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              <input
-                ref={inputRef}
-                type="file"
-                accept="image/*"
-                className="sr-only"
-                onClick={(event) => {
-                  event.currentTarget.value = '';
-                }}
-                onChange={(event) => onFileSelect(event.target.files?.[0] ?? null)}
-              />
-              <button
-                type="button"
-                onClick={() => inputRef.current?.click()}
-                className="inline-flex items-center gap-2 rounded-2xl border border-gold/30 bg-gold/10 px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-gold hover:bg-gold/20"
-              >
-                <Upload size={14} />
-                {hasPendingFile ? 'Rasmni almashtirish' : 'Rasm yuklash'}
-              </button>
-              {hasPendingFile ? (
-                <button
-                  type="button"
-                  onClick={onResetPhoto}
-                  className="inline-flex items-center gap-2 rounded-2xl border border-red-900/40 bg-red-950/20 px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-red-400 hover:bg-red-900/30"
-                >
-                  <Trash2 size={14} />
-                  Bekor qilish
-                </button>
-              ) : null}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-5">
-          <label className="block">
-            <span className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">F.I.Sh.</span>
-            <input
-              type="text"
-              value={profile.fullName}
-              onChange={(event) => onProfileChange({ fullName: event.target.value })}
-              className="mt-2 w-full rounded-2xl border border-zinc-800 bg-zinc-900/40 px-4 py-4 text-sm text-zinc-200 outline-none focus:border-gold/40"
-            />
-          </label>
-          <label className="block">
-            <span className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Telefon</span>
-            <input
-              type="text"
-              value={profile.phone}
-              onChange={(event) => onProfileChange({ phone: event.target.value })}
-              className="mt-2 w-full rounded-2xl border border-zinc-800 bg-zinc-900/40 px-4 py-4 text-sm text-zinc-200 outline-none focus:border-gold/40"
-            />
-          </label>
-          <label className="block">
-            <span className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Email</span>
-            <input
-              type="text"
-              value={profile.email}
-              disabled
-              className="mt-2 w-full rounded-2xl border border-zinc-800 bg-zinc-900/20 px-4 py-4 text-sm text-zinc-500 outline-none"
-            />
-          </label>
-          <label className="block">
-            <span className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Bo'lim</span>
-            <input
-              type="text"
-              value={profile.department}
-              disabled
-              className="mt-2 w-full rounded-2xl border border-zinc-800 bg-zinc-900/20 px-4 py-4 text-sm text-zinc-500 outline-none"
-            />
-          </label>
-        </div>
-
-        <div className="mt-8 flex flex-col-reverse md:flex-row gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full rounded-2xl border border-zinc-800 px-5 py-4 text-sm font-bold text-zinc-400 hover:bg-zinc-900/40 hover:text-zinc-200"
-          >
-            Yopish
-          </button>
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={saving}
-            className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-gold px-5 py-4 text-sm font-bold text-black hover:brightness-110 disabled:opacity-60"
-          >
-            {saving ? <ShieldCheck size={16} className="animate-pulse" /> : <Save size={16} />}
-            {saving ? 'Saqlanmoqda...' : 'Saqlash'}
-          </button>
-        </div>
-      </div>
-    </motion.div>
-  );
 }
 
 export default function App() {
@@ -1468,6 +1260,9 @@ export default function App() {
               className="fixed inset-0 bg-black/80 backdrop-blur-md z-40"
             />
             <AdminProfileModal
+              avatarPreview={
+                adminProfile.photoUrl || createAvatarPlaceholder(adminProfile.fullName)
+              }
               profile={adminProfile}
               saving={savingProfile}
               hasPendingFile={Boolean(pendingProfilePhoto)}
