@@ -1,31 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Application, DashboardSummary, HrProfile } from './types';
 import { 
   LayoutDashboard, 
   Users, 
-  ShieldCheck, 
-  EyeOff, 
-  Search,
   CheckCircle2,
-  XCircle,
-  Clock,
-  ChevronRight,
   TrendingUp,
-  Zap,
-  LogOut,
-  ShieldAlert,
-  Fingerprint,
   UserCircle,
-  Save,
-  Loader2,
-  FileText,
-  ArrowUpRight,
   Menu,
   X,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { cn } from './lib/utils';
 import { format } from 'date-fns';
+import { cn } from './lib/utils';
 import {
   downloadApplicationsExport,
   downloadBlob,
@@ -34,37 +20,19 @@ import {
   updateApplicationStatus,
   updateProfile,
 } from './lib/api';
-
-// --- Components ---
-
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
-} from 'recharts';
-import { 
-  Phone, 
-  Send,
-  UserCheck
-} from 'lucide-react';
 import { SidebarItem } from './components/SidebarItem';
-import { StatCard } from './components/StatCard';
-import { ProfileImageField, ProfileInput } from './components/ProfileFields';
+import {
+  ApplicationsScene,
+  DashboardScene,
+  HiredStaffScene,
+  ProfileScene,
+  ShortlistedScene,
+} from './components/HrScenes';
+import { ApplicationDetailPanel } from './components/ApplicationDetailPanel';
 
 type ApplicationFilter = 'all' | 'new_resumes' | 'pending' | 'hired';
 
 const MAX_PROFILE_IMAGE_SIZE_BYTES = 3 * 1024 * 1024;
-const DOCUMENT_TYPE_LABELS: Record<string, string> = {
-  diploma: "Oliy ma'lumot diplomi",
-  certificate: 'Ilmiy unvon / Sertifikat',
-  employment: 'Ish staji (E-Mehnat)',
-  resume: 'Rezyume / CV',
-};
-
 function readFileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -89,22 +57,6 @@ function createAvatarPlaceholder(label: string) {
       <text x="50%" y="53%" dominant-baseline="middle" text-anchor="middle" fill="#10b981" font-family="Arial, sans-serif" font-size="28" font-weight="700">${initials}</text>
     </svg>`,
   )}`;
-}
-
-function getDocumentLabel(type: string) {
-  return DOCUMENT_TYPE_LABELS[type] ?? type;
-}
-
-function isViewableDocumentUrl(url?: string) {
-  if (!url) {
-    return false;
-  }
-
-  return url.startsWith('http://') || url.startsWith('https://') || url.startsWith('/');
-}
-
-function isLegacyDocumentUrl(url?: string) {
-  return String(url ?? '').startsWith('uploaded://');
 }
 
 export default function App() {
@@ -434,341 +386,52 @@ export default function App() {
             </div>
           )}
           {activeTab === 'dashboard' && (
-            <div className="flex-1 overflow-y-auto min-h-0 bg-slate-950 p-3 sm:p-4 space-y-4">
-              {/* Stats Row */}
-              <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <StatCard label="Umumiy Arizalar" value={summary.totalApplications} trend={`${summary.pendingCount} ta navbatda`} />
-                <StatCard label="O'rtacha Ball (AI)" value={summary.averageScore.toFixed(1)} subLabel="Max: 100 / Min: 0" />
-                <StatCard label="Ishga Qabul Samaradorligi" value={`${summary.hiredCount}`} color="text-emerald-500" subLabel="Hired nomzodlar" />
-                <StatCard label="Tizim Holati" value={isOffline ? "OFFLINE" : "ONLINE"} color={isOffline ? "text-red-500" : "text-emerald-500"} trend={isOffline ? "Aloqa tiklanmoqda" : "Barqaror"} />
-              </section>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                 <div className="bg-slate-900 border border-slate-800 p-6 rounded shadow-sm">
-                    <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-6">Arizalar taqsimoti (Vazirliklar kesimida)</h3>
-                    <div className="h-64">
-                       <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={deptData}>
-                             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                             <XAxis dataKey="name" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
-                             <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
-                             <Tooltip 
-                                contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '4px', fontSize: '10px' }}
-                                itemStyle={{ color: '#10b981' }}
-                             />
-                             <Bar dataKey="apps" fill="#10b981" radius={[4, 4, 0, 0]} />
-                          </BarChart>
-                       </ResponsiveContainer>
-                    </div>
-                 </div>
-                 <div className="bg-slate-900 border border-slate-800 p-6 rounded shadow-sm">
-                    <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-6">Korrupsiya xavfi darajasi (%)</h3>
-                    <div className="h-64">
-                       <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={deptData} layout="vertical">
-                             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
-                             <XAxis type="number" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
-                             <YAxis dataKey="name" type="category" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
-                             <Tooltip 
-                                contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '4px', fontSize: '10px' }}
-                                itemStyle={{ color: '#f43f5e' }}
-                             />
-                             <Bar dataKey="risk" fill="#f43f5e" radius={[0, 4, 4, 0]} />
-                          </BarChart>
-                       </ResponsiveContainer>
-                    </div>
-                 </div>
-              </div>
-
-              <div className="bg-slate-950 border border-slate-800 rounded shadow-sm text-slate-500 p-6">
-                <div className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest mb-4 flex items-center gap-2 font-mono">
-                  <Zap size={12} /> TIZIM ANALITIKASI VA KRITIK SIGNALLAR
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                   <div className="space-y-4">
-                      <div className="flex justify-between text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                         <span>Barcha tekshiruvlar</span>
-                         <span className="text-emerald-500">Faol</span>
-                      </div>
-                      <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                         <div className="bg-emerald-500 h-full w-[100%]"></div>
-                      </div>
-                      <div className="flex justify-between text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                         <span>Shubhali nomzodlar</span>
-                         <span className="text-amber-500">Monitoring ostida</span>
-                      </div>
-                      <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                         <div className="bg-amber-500 h-full w-[12%]"></div>
-                      </div>
-                   </div>
-                   <div className="space-y-3 font-mono text-[9px]">
-                      <div className="text-slate-700 uppercase tracking-widest py-4 text-center border border-slate-900 rounded">Monitoring faol. Tizim xavfsiz holatda.</div>
-                   </div>
-                </div>
-              </div>
-            </div>
+            <DashboardScene deptData={deptData} isOffline={isOffline} summary={summary} />
           )}
 
           {activeTab === 'applications' && (
-              <section className="flex-1 px-4 pb-4 overflow-hidden flex flex-col">
-                <div className="bg-slate-900 border border-slate-800 rounded shadow-sm h-full flex flex-col overflow-hidden">
-                  <div className="shrink-0 border-b border-slate-800 bg-slate-950 p-4">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                    <h2 className="text-xs font-bold text-slate-400 uppercase tracking-tighter">Barcha arizalar bazasi</h2>
-                    <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap lg:w-auto lg:justify-end">
-                      <button
-                        onClick={() => void exportReport()}
-                        disabled={exportingReport}
-                        className="rounded border border-emerald-900 bg-emerald-950/30 px-3 py-1.5 text-[10px] font-bold uppercase text-emerald-400 outline-none hover:bg-emerald-900/40 disabled:opacity-50"
-                      >
-                        {exportingReport ? 'Eksport...' : 'CSV eksport'}
-                      </button>
-                       <div className="relative">
-                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" size={12} />
-                        <input 
-                          type="text" 
-                          placeholder="Nomzod yoki lavozim..." 
-                          value={searchTerm}
-                          onChange={(e) => setSearchTerm(e.target.value)}
-                          className="w-full rounded border border-slate-800 bg-slate-950 py-1.5 pl-8 pr-2 font-mono text-xs text-slate-300 outline-none focus:border-emerald-500 sm:w-64" 
-                        />
-                      </div>
-                      <select 
-                        value={applicationFilter}
-                        onChange={(e) => setApplicationFilter(e.target.value as ApplicationFilter)}
-                        className="rounded border border-slate-800 bg-slate-950 px-2 py-1.5 text-[10px] font-bold uppercase text-slate-400 outline-none focus:border-emerald-500"
-                      >
-                        <option value="all">Barcha arizalar</option>
-                        <option value="new_resumes">Yangi rezyumelar</option>
-                        <option value="pending">Pending</option>
-                        <option value="hired">Qabul qilinganlar</option>
-                      </select>
-                    </div>
-                    </div>
-                  </div>
-                  <div className="flex-1 overflow-auto">
-                    <table className="min-w-[720px] w-full text-left">
-                      <thead className="bg-slate-950 text-[10px] text-slate-500 uppercase sticky top-0 z-10 border-b border-slate-800">
-                        <tr>
-                          <th className="p-3 font-semibold">Nomzod</th>
-                          <th className="p-3 font-semibold">Lavozim</th>
-                          <th className="p-3 font-semibold">AI Ball</th>
-                          <th className="p-3 font-semibold text-center">Audit Xulosasi</th>
-                          <th className="p-3 font-semibold">Holat</th>
-                          <th className="p-3 font-semibold text-right">Batafsil</th>
-                        </tr>
-                      </thead>
-                      <tbody className="text-xs divide-y divide-slate-800 font-mono">
-                        {filteredApplications.map(app => (
-                          <tr key={app.id} className="hover:bg-slate-800 transition-colors">
-                            <td className="p-3 font-bold">
-                               <span className="blur-[6px]">{app.candidateName}</span>
-                            </td>
-                            <td className="p-3 text-slate-500">{app.position}</td>
-                            <td className="p-3">
-                               <span className={cn(
-                                 "px-2 py-0.5 rounded font-bold",
-                                 app.score > 80 ? "bg-emerald-950 text-emerald-400" : app.score > 60 ? "bg-blue-950 text-blue-400" : "bg-red-950 text-red-400"
-                               )}>{app.score}</span>
-                            </td>
-                            <td className="p-3 text-center">
-                               {app.conflictDetected ? 
-                                 <span className="text-[10px] text-red-500 font-bold border border-red-900 px-2 py-0.5 rounded bg-red-950/30">CONFLICT</span> : 
-                                 <span className="text-[10px] text-emerald-500 font-bold border border-emerald-900 px-2 py-0.5 rounded bg-emerald-950/30">CLEAN</span>
-                               }
-                            </td>
-                            <td className="p-3 text-blue-500 uppercase font-black">{app.status}</td>
-                            <td className="p-3 text-right">
-                               <button onClick={() => setSelectedApplication(app)} className="text-slate-100 bg-slate-950 p-1.5 rounded hover:bg-emerald-600 transition-colors"><ChevronRight size={14} /></button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="p-3 bg-slate-950 border-t border-slate-800 flex justify-between text-[10px] font-bold text-slate-600 uppercase tracking-widest shrink-0">
-                    <div>Jonli ro'yxat • Jami {filteredApplications.length} nomzod</div>
-                    <div className="flex gap-4">
-                      <span className="flex items-center gap-1"><Fingerprint size={10} /> Hash Verified</span>
-                      <span className="flex items-center gap-1 text-emerald-600"><Zap size={10} /> Live Monitoring On</span>
-                    </div>
-                  </div>
-                </div>
-              </section>
+            <ApplicationsScene
+              applicationFilter={applicationFilter}
+              exportingReport={exportingReport}
+              filteredApplications={filteredApplications}
+              onExport={() => void exportReport()}
+              onFilterChange={setApplicationFilter}
+              onSearchChange={setSearchTerm}
+              onSelectApplication={setSelectedApplication}
+              searchTerm={searchTerm}
+            />
           )}
 
-          {(activeTab as string) === 'shortlisted' && (
-              <section className="flex-1 px-4 pb-4 overflow-hidden flex flex-col">
-                <div className="bg-slate-900 border border-slate-800 rounded shadow-sm h-full flex flex-col overflow-hidden">
-                  <div className="p-4 border-b border-slate-800 bg-slate-950 shrink-0">
-                    <h2 className="text-xs font-bold text-blue-400 uppercase tracking-tighter">Suhbatga chaqirilgan nomzodlar (Interview Stage)</h2>
-                  </div>
-                  <div className="flex-1 overflow-auto">
-                    <table className="min-w-[720px] w-full text-left">
-                      <thead className="bg-slate-950 text-[10px] text-slate-500 uppercase sticky top-0 z-10 border-b border-slate-800">
-                        <tr>
-                          <th className="p-4 font-semibold">Nomzod</th>
-                          <th className="p-4 font-semibold">Lavozim</th>
-                          <th className="p-4 font-semibold">Suhbatga chaqirgan HR</th>
-                          <th className="p-4 font-semibold text-right">Amal</th>
-                        </tr>
-                      </thead>
-                      <tbody className="text-xs divide-y divide-slate-800 font-mono">
-                        {applications.filter(a => a.status === 'shortlisted').length > 0 ? (
-                           applications.filter(a => a.status === 'shortlisted').map(app => (
-                             <tr key={app.id} className="hover:bg-slate-800 transition-colors">
-                               <td className="p-4">
-                                  <div className="font-bold text-slate-100 blur-[6px]">{app.candidateName}</div>
-                               </td>
-                               <td className="p-4 text-slate-400">{app.position}</td>
-                               <td className="p-4 text-emerald-500 font-bold uppercase text-[10px]">
-                                  {app.recruiterInfo || "Tizim"}
-                               </td>
-                               <td className="p-4 text-right">
-                                  <button onClick={() => setSelectedApplication(app)} className="bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded text-[10px] font-bold text-white transition-colors">Intervyu Markazi</button>
-                               </td>
-                             </tr>
-                           ))
-                        ) : (
-                          <tr>
-                            <td colSpan={4} className="p-12 text-center text-slate-600 uppercase tracking-widest font-bold">
-                               Suhbatdagi nomzodlar yo'q.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </section>
+          {activeTab === 'shortlisted' && (
+            <ShortlistedScene
+              applications={applications}
+              onSelectApplication={setSelectedApplication}
+            />
           )}
 
           {activeTab === 'hired_staff' && (
-              <section className="flex-1 px-4 pb-4 overflow-hidden flex flex-col">
-                <div className="bg-slate-900 border border-slate-800 rounded shadow-sm h-full flex flex-col overflow-hidden">
-                  <div className="p-4 border-b border-slate-800 bg-slate-950 shrink-0">
-                    <h2 className="text-xs font-bold text-emerald-400 uppercase tracking-tighter">Ishga qabul qilingan kadrlar ruyhati</h2>
-                  </div>
-                  <div className="flex-1 overflow-auto">
-                    <table className="min-w-[720px] w-full text-left">
-                      <thead className="bg-slate-950 text-[10px] text-slate-500 uppercase sticky top-0 z-10 border-b border-slate-800">
-                        <tr>
-                          <th className="p-4 font-semibold">Xodim</th>
-                          <th className="p-4 font-semibold">Lavozim</th>
-                          <th className="p-4 font-semibold">Qabul qilgan HR</th>
-                          <th className="p-4 font-semibold">Sana</th>
-                          <th className="p-4 font-semibold text-right">Amal</th>
-                        </tr>
-                      </thead>
-                      <tbody className="text-xs divide-y divide-slate-800 font-mono">
-                        {applications.filter(a => a.status === 'hired').length > 0 ? (
-                           applications.filter(a => a.status === 'hired').map(app => (
-                             <tr key={app.id} className="hover:bg-slate-800 transition-colors">
-                               <td className="p-4">
-                                  <div className="flex items-center gap-3">
-                                     <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-500"><UserCheck size={14} /></div>
-                                     <div>
-                                        <div className="font-bold text-slate-100">{app.candidateName}</div>
-                                        <div className="text-[10px] text-slate-500">{app.candidateEmail}</div>
-                                     </div>
-                                  </div>
-                               </td>
-                               <td className="p-4 text-slate-400">{app.position}</td>
-                               <td className="p-4 text-emerald-500 font-black uppercase text-[10px]">
-                                  {app.recruiterInfo || "Tizim"}
-                               </td>
-                               <td className="p-4 text-slate-500">
-                                  {app.updatedAt ? format(new Date(app.updatedAt), 'yyyy-MM-dd') : 'Recently'}
-                               </td>
-                               <td className="p-4 text-right">
-                                  <button onClick={() => setSelectedApplication(app)} className="bg-slate-950 hover:bg-emerald-600 px-3 py-1 rounded text-[10px] font-bold text-slate-200 transition-colors">Batafsil</button>
-                               </td>
-                             </tr>
-                           ))
-                        ) : (
-                          <tr>
-                            <td colSpan={5} className="p-12 text-center text-slate-600 uppercase tracking-widest font-bold">
-                               Hozircha ishga qabul qilingan xodimlar yo'q.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </section>
+            <HiredStaffScene
+              applications={applications}
+              onSelectApplication={setSelectedApplication}
+            />
           )}
 
           {activeTab === 'profile' && profileDraft && (
-            <section className="flex-1 px-4 pb-4 overflow-hidden flex flex-col">
-              <div className="bg-slate-900 border border-slate-800 rounded shadow-sm h-full flex flex-col overflow-hidden">
-                <div className="flex flex-col gap-3 border-b border-slate-800 bg-slate-950 p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h2 className="text-xs font-bold text-emerald-400 uppercase tracking-tighter">HR Profil</h2>
-                    <p className="text-[10px] text-slate-500 mt-1">Kadrlar bo'limi foydalanuvchi ma'lumotlari</p>
-                  </div>
-                  <button
-                    onClick={() => void handleSaveProfile()}
-                    disabled={savingProfile}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded bg-emerald-600 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-950 hover:bg-emerald-500 disabled:opacity-60 sm:w-auto"
-                  >
-                    {savingProfile ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-                    {savingProfile ? 'Saqlanmoqda...' : 'Saqlash'}
-                  </button>
-                </div>
-
-                <div className="flex-1 overflow-auto p-6 bg-slate-950">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl">
-                    <ProfileImageField
-                      fullName={`${profileDraft.firstName} ${profileDraft.lastName}`}
-                      imageUrl={
-                        profileDraft.photoUrl ||
-                        createAvatarPlaceholder(`${profileDraft.firstName} ${profileDraft.lastName}`)
-                      }
-                      hasPendingFile={Boolean(pendingProfilePhoto)}
-                      onFileSelect={handleProfilePhotoChange}
-                      onReset={handleProfilePhotoReset}
-                    />
-                    <ProfileInput
-                      label="Ismi"
-                      value={profileDraft.firstName}
-                      onChange={(value) => setProfileDraft((prev) => prev ? { ...prev, firstName: value } : prev)}
-                    />
-                    <ProfileInput
-                      label="Familiyasi"
-                      value={profileDraft.lastName}
-                      onChange={(value) => setProfileDraft((prev) => prev ? { ...prev, lastName: value } : prev)}
-                    />
-                    <ProfileInput
-                      label="Otasining ismi"
-                      value={profileDraft.middleName}
-                      onChange={(value) => setProfileDraft((prev) => prev ? { ...prev, middleName: value } : prev)}
-                    />
-                    <ProfileInput
-                      label="Telefon"
-                      value={profileDraft.phone}
-                      onChange={(value) => setProfileDraft((prev) => prev ? { ...prev, phone: value } : prev)}
-                    />
-                    <ProfileInput
-                      label="Email"
-                      value={profileDraft.email}
-                      disabled
-                      onChange={() => {}}
-                    />
-                    <ProfileInput
-                      label="Passport raqami"
-                      value={profileDraft.passportNumber}
-                      onChange={(value) => setProfileDraft((prev) => prev ? { ...prev, passportNumber: value.toUpperCase() } : prev)}
-                    />
-                    <ProfileInput
-                      label="JSHSHIR / PINFL"
-                      value={profileDraft.passportPinfl}
-                      onChange={(value) => setProfileDraft((prev) => prev ? { ...prev, passportPinfl: value } : prev)}
-                    />
-                  </div>
-                </div>
-              </div>
-            </section>
+            <ProfileScene
+              hasPendingProfilePhoto={Boolean(pendingProfilePhoto)}
+              onFieldChange={(field, value) =>
+                setProfileDraft((prev) => (prev ? { ...prev, [field]: value } : prev))
+              }
+              onFileSelect={handleProfilePhotoChange}
+              onResetPhoto={handleProfilePhotoReset}
+              onSave={() => void handleSaveProfile()}
+              profileDraft={profileDraft}
+              profileImageUrl={
+                profileDraft.photoUrl ||
+                createAvatarPlaceholder(`${profileDraft.firstName} ${profileDraft.lastName}`)
+              }
+              savingProfile={savingProfile}
+            />
           )}
 
         </div>
@@ -789,194 +452,17 @@ export default function App() {
         </footer>
       </main>
 
-      {/* Slide-over Detail View */}
       <AnimatePresence>
         {selectedApplication && (
-          <React.Fragment key="detail-view-container">
-            <motion.div 
-               key="overlay"
-               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-               onClick={() => setSelectedApplication(null)}
-               className="fixed inset-0 bg-slate-950/80 backdrop-blur-[4px] z-[60]"
-            />
-            <motion.div 
-              key="panel"
-              initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed right-0 top-0 z-[70] flex h-full w-full max-w-full flex-col border-l border-slate-800 bg-slate-900 font-mono shadow-2xl sm:max-w-lg"
-            >
-               <div className="flex items-start justify-between gap-4 border-b border-slate-800 bg-slate-950 p-4 text-white sm:p-6">
-                     <div>
-                        <h3 className={cn(selectedApplication.status !== 'hired' && "blur-[10px]", "text-sm font-black uppercase tracking-tighter")}>
-                          {selectedApplication.candidateName}
-                        </h3>
-                        <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">{selectedApplication.position}</p>
-                      </div>
-                  <button onClick={() => setSelectedApplication(null)} className="text-slate-500 hover:text-white transition-colors">
-                    <XCircle size={20} />
-                  </button>
-               </div>
-
-               <div className="flex-1 overflow-y-auto space-y-6 p-4 sm:p-6">
-                  {selectedApplication.conflictDetected && (
-                    <div className="p-4 bg-red-950 border border-red-900 text-red-400 rounded-sm">
-                       <div className="flex gap-3">
-                         <ShieldAlert size={20} className="shrink-0" />
-                         <div>
-                            <p className="text-[10px] font-black uppercase italic tracking-widest">Manfaatlar to'qnashuvi aniqlandi!</p>
-                            <p className="text-[11px] mt-1 leading-relaxed text-red-500/80">{selectedApplication.conflictDetails}</p>
-                         </div>
-                       </div>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div className="p-4 bg-slate-950 border border-slate-800 rounded">
-                       <p className="text-[9px] font-bold text-slate-500 uppercase mb-1">AI Merit Score</p>
-                       <p className="text-3xl font-black text-slate-100">{selectedApplication.score}</p>
-                    </div>
-                    <div className="p-4 bg-slate-950 border border-slate-800 rounded">
-                       <p className="text-[9px] font-bold text-slate-500 uppercase mb-1">Current Status</p>
-                       <p className="text-lg font-black text-emerald-500 uppercase mt-2 tracking-tighter">{selectedApplication.status}</p>
-                    </div>
-                  </div>
-
-                  {selectedApplication.status === 'hired' && (
-                     <section className="space-y-4">
-                        <div className="text-[10px] font-bold text-emerald-500 uppercase flex items-center gap-2">
-                           <Phone size={12} /> Aloqa Ma'lumotlari (REVEALED)
-                        </div>
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                           <div className="p-4 bg-emerald-950/20 border border-emerald-900 rounded flex items-center gap-3">
-                              <Phone size={14} className="text-emerald-500" />
-                              <div>
-                                 <p className="text-[8px] text-slate-500 uppercase font-bold">Telefon</p>
-                                 <p className="text-[10px] text-slate-100 font-bold">{selectedApplication.phone || "+998 90 000 00 00"}</p>
-                              </div>
-                           </div>
-                           <div className="p-4 bg-emerald-950/20 border border-emerald-900 rounded flex items-center gap-3">
-                              <Send size={14} className="text-emerald-500" />
-                              <div>
-                                 <p className="text-[8px] text-slate-500 uppercase font-bold">Telegram</p>
-                                 <p className="text-[10px] text-slate-100 font-bold">{selectedApplication.telegram || "@candidate"}</p>
-                              </div>
-                           </div>
-                        </div>
-                     </section>
-                  )}
-
-                  <section className="space-y-4">
-                     <div className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-2">
-                        <FileText size={12} /> Ko'rinadigan hujjatlar
-                     </div>
-                     <div className="p-4 border border-slate-800 space-y-3 bg-slate-950/50">
-                        <div className="rounded border border-amber-900/30 bg-amber-950/10 px-3 py-2 text-[10px] uppercase tracking-widest text-amber-400">
-                          Fuqarolik pasporti HR uchun yashirilgan.
-                        </div>
-
-                        {selectedApplication.documents.length > 0 ? (
-                          selectedApplication.documents.map((document, index) => (
-                            <div
-                              key={`${document.type}-${document.name}-${index}`}
-                              className="flex flex-col gap-3 rounded border border-slate-800 bg-slate-950 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-                            >
-                              <div className="min-w-0">
-                                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                                  {getDocumentLabel(document.type)}
-                                </p>
-                                <p className="mt-1 truncate text-xs font-semibold text-slate-200">
-                                  {document.name}
-                                </p>
-                              </div>
-
-                              {isViewableDocumentUrl(document.url) ? (
-                                <a
-                                  href={document.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex shrink-0 items-center gap-2 rounded border border-emerald-900 bg-emerald-950/20 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-400 hover:bg-emerald-900/30"
-                                >
-                                  Ko'rish
-                                  <ArrowUpRight size={12} />
-                                </a>
-                              ) : isLegacyDocumentUrl(document.url) ? (
-                                <span className="shrink-0 rounded border border-amber-900/40 bg-amber-950/20 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-amber-400">
-                                  Qayta yuklash kerak
-                                </span>
-                              ) : (
-                                <span className="shrink-0 rounded border border-slate-800 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                                  Yuklangan
-                                </span>
-                              )}
-                            </div>
-                          ))
-                        ) : (
-                          <div className="rounded border border-slate-800 bg-slate-950 px-4 py-6 text-center text-[11px] uppercase tracking-widest text-slate-500">
-                            HR uchun ko'rinadigan hujjatlar topilmadi.
-                          </div>
-                        )}
-                     </div>
-                  </section>
-
-                  <section className="space-y-4">
-                     <div className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-2">
-                        <Fingerprint size={12} /> Metadata Analysis
-                     </div>
-                     <div className="p-4 border border-slate-800 space-y-4 bg-slate-950/50">
-                        <div className="space-y-1">
-                          <p className="text-[9px] font-bold text-slate-600 uppercase">Ko'nikmalar</p>
-                          <div className="flex flex-wrap gap-1">
-                            {selectedApplication.maskedData.skills.map(s => (
-                              <span key={s} className="px-2 py-0.5 bg-slate-800 text-slate-300 text-[9px] font-bold rounded-sm uppercase">{s}</span>
-                            ))}
-                          </div>
-                        </div>
-                        <div>
-                          <p className="text-[9px] font-bold text-slate-600 uppercase">Tajriba</p>
-                          <p className="text-[10px] text-slate-400 mt-1 leading-relaxed bg-slate-950 p-3 border border-slate-800 italic">{selectedApplication.maskedData.experience}</p>
-                        </div>
-                        <div>
-                          <p className="text-[9px] font-bold text-slate-600 uppercase">Ta'lim</p>
-                          <p className="text-[10px] text-slate-400 mt-1 leading-relaxed bg-slate-950 p-3 border border-slate-800">{selectedApplication.maskedData.education}</p>
-                        </div>
-                     </div>
-                  </section>
-               </div>
-
-                <div className="p-6 border-t border-slate-800 flex flex-col gap-3 bg-slate-950">
-                  {selectedApplication.status === 'pending' || selectedApplication.status === 'reviewing' ? (
-                    <button 
-                      onClick={() => handleUpdateStatus(selectedApplication.id, 'shortlisted')}
-                      className="w-full bg-blue-600 text-white font-black py-4 text-xs uppercase tracking-widest rounded shadow hover:bg-blue-500 flex items-center justify-center gap-2"
-                    >
-                      SUHBATGA CHAQIRISH (INTERVIEW ON)
-                    </button>
-                  ) : selectedApplication.status === 'shortlisted' ? (
-                    <button 
-                      onClick={() => handleUpdateStatus(selectedApplication.id, 'hired')}
-                      className="w-full bg-emerald-600 text-slate-950 font-black py-4 text-xs uppercase tracking-widest rounded shadow hover:bg-emerald-500 flex items-center justify-center gap-2"
-                    >
-                      ISHGA QABUL QILISH (FINALIZE)
-                    </button>
-                  ) : selectedApplication.status === 'hired' ? (
-                    <div className="text-center py-4 text-emerald-500 font-bold text-[10px] uppercase border border-emerald-900 bg-emerald-950/20">
-                      Ushbu nomzod ishga qabul qilingan.
-                    </div>
-                  ) : null}
-                  
-                  {selectedApplication.status !== 'hired' && selectedApplication.status !== 'rejected' && (
-                    <button 
-                      onClick={() => handleUpdateStatus(selectedApplication.id, 'rejected')}
-                      className="w-full bg-slate-800 text-slate-400 font-black py-4 text-xs uppercase tracking-widest rounded hover:bg-slate-700 flex items-center justify-center gap-2 border border-slate-700"
-                    >
-                      RAD ETISH
-                    </button>
-                  ) }
-               </div>
-            </motion.div>
-          </React.Fragment>
+          <ApplicationDetailPanel
+            application={selectedApplication}
+            onClose={() => setSelectedApplication(null)}
+            onUpdateStatus={handleUpdateStatus}
+          />
         )}
       </AnimatePresence>
     </div>
   );
 }
+
+
