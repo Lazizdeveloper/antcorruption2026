@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Application, DashboardSummary, HrProfile } from './types';
 import { 
   LayoutDashboard, 
@@ -18,8 +18,6 @@ import {
   UserCircle,
   Save,
   Loader2,
-  Upload,
-  Trash2,
   FileText,
   ArrowUpRight,
   Menu,
@@ -53,30 +51,9 @@ import {
   Send,
   UserCheck
 } from 'lucide-react';
-
-const SidebarItem = ({ icon: Icon, label, active, onClick }: { icon: any, label: string, active: boolean, onClick: () => void }) => (
-  <button
-    onClick={onClick}
-    className={cn(
-      "w-full flex items-center gap-3 px-6 py-2 transition-all text-sm font-medium",
-      active 
-        ? "bg-emerald-600/10 border-l-4 border-emerald-500 text-emerald-400" 
-        : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
-    )}
-  >
-    <Icon size={14} />
-    <span>{label}</span>
-  </button>
-);
-
-const StatCard = ({ label, value, trend, subLabel, color = "text-slate-100" }: { label: string, value: string | number, trend?: string, subLabel?: string, color?: string }) => (
-  <div className="bg-slate-900 border border-slate-800 p-4 rounded shadow-sm">
-    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{label}</div>
-    <div className={cn("text-2xl font-black mt-1 tracking-tighter", color)}>{value}</div>
-    {trend && <div className="text-[10px] text-emerald-500 mt-1 font-bold">{trend}</div>}
-    {subLabel && <div className="text-[10px] text-slate-500 mt-1">{subLabel}</div>}
-  </div>
-);
+import { SidebarItem } from './components/SidebarItem';
+import { StatCard } from './components/StatCard';
+import { ProfileImageField, ProfileInput } from './components/ProfileFields';
 
 type ApplicationFilter = 'all' | 'new_resumes' | 'pending' | 'hired';
 
@@ -129,95 +106,6 @@ function isViewableDocumentUrl(url?: string) {
 function isLegacyDocumentUrl(url?: string) {
   return String(url ?? '').startsWith('uploaded://');
 }
-
-const ProfileInput = ({
-  label,
-  value,
-  onChange,
-  disabled,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  disabled?: boolean;
-}) => (
-  <div className="space-y-2">
-    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{label}</label>
-    <input
-      type="text"
-      value={value}
-      disabled={disabled}
-      onChange={(event) => onChange(event.target.value)}
-      className="w-full rounded border border-slate-800 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-200 outline-none focus:border-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
-    />
-  </div>
-);
-
-const ProfileImageField = ({
-  fullName,
-  imageUrl,
-  hasPendingFile,
-  onFileSelect,
-  onReset,
-}: {
-  fullName: string;
-  imageUrl: string;
-  hasPendingFile: boolean;
-  onFileSelect: (file: File | null) => void;
-  onReset: () => void;
-}) => {
-  const inputRef = useRef<HTMLInputElement | null>(null);
-
-  return (
-    <div className="md:col-span-2 rounded border border-slate-800 bg-slate-900/40 p-5">
-      <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-4">
-          <img
-            src={imageUrl || createAvatarPlaceholder(fullName)}
-            alt={fullName}
-            className="h-20 w-20 rounded-full border border-slate-800 object-cover"
-          />
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Profil rasmi</p>
-            <p className="mt-2 text-sm text-slate-300">Yangi rasm saqlangandan keyin sidebar avatari ham yangilanadi.</p>
-            <p className="mt-1 text-[11px] text-slate-500">JPG, PNG, WEBP yoki GIF. Maksimal 3 MB.</p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-3">
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/*"
-            className="sr-only"
-            onClick={(event) => {
-              event.currentTarget.value = '';
-            }}
-            onChange={(event) => onFileSelect(event.target.files?.[0] ?? null)}
-          />
-          <button
-            type="button"
-            onClick={() => inputRef.current?.click()}
-            className="inline-flex items-center gap-2 rounded border border-emerald-900 bg-emerald-950/30 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-400 hover:bg-emerald-900/40"
-          >
-            <Upload size={12} />
-            {hasPendingFile ? 'Rasmni almashtirish' : 'Rasm yuklash'}
-          </button>
-          {hasPendingFile ? (
-            <button
-              type="button"
-              onClick={onReset}
-              className="inline-flex items-center gap-2 rounded border border-red-900 bg-red-950/20 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-red-400 hover:bg-red-900/30"
-            >
-              <Trash2 size={12} />
-              Bekor qilish
-            </button>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  );
-};
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'applications' | 'shortlisted' | 'hired_staff' | 'profile'>('dashboard');
@@ -833,7 +721,10 @@ export default function App() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl">
                     <ProfileImageField
                       fullName={`${profileDraft.firstName} ${profileDraft.lastName}`}
-                      imageUrl={profileDraft.photoUrl}
+                      imageUrl={
+                        profileDraft.photoUrl ||
+                        createAvatarPlaceholder(`${profileDraft.firstName} ${profileDraft.lastName}`)
+                      }
                       hasPendingFile={Boolean(pendingProfilePhoto)}
                       onFileSelect={handleProfilePhotoChange}
                       onReset={handleProfilePhotoReset}

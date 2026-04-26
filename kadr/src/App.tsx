@@ -1,10 +1,7 @@
 import {
   Fragment,
   useEffect,
-  useRef,
   useState,
-  type InputHTMLAttributes,
-  type ReactNode,
 } from 'react';
 import {
   Building2,
@@ -22,8 +19,6 @@ import {
   LogOut,
   Loader2,
   Save,
-  RefreshCcw,
-  Trash2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -43,6 +38,12 @@ import {
   uploadProfileImage,
   updateProfile,
 } from './lib/api';
+import { SidebarItem } from './components/SidebarItem';
+import { StatCard } from './components/StatCard';
+import { ProgressStep } from './components/ProgressStep';
+import { FileUploadBox, FormInput, FormTextarea, ProfileImageField } from './components/FormFields';
+import { MeritTest } from './components/MeritTest';
+import { RankingRow } from './components/RankingRow';
 
 type ActiveTab = 'dashboard' | 'apply' | 'status' | 'profile';
 
@@ -1122,7 +1123,10 @@ export default function App() {
                 <div className="mb-8">
                   <ProfileImageField
                     name={`${profileDraft.name} ${profileDraft.surname}`}
-                    imageUrl={profileDraft.photoUrl}
+                    imageUrl={
+                      profileDraft.photoUrl ||
+                      createAvatarPlaceholder(`${profileDraft.name} ${profileDraft.surname}`)
+                    }
                     hasPendingFile={Boolean(pendingProfilePhoto)}
                     onFileSelect={handleProfilePhotoChange}
                     onReset={handleProfilePhotoReset}
@@ -1212,394 +1216,6 @@ export default function App() {
           )}
         </AnimatePresence>
       </main>
-    </div>
-  );
-}
-
-function SidebarItem({ icon, label, active, onClick }: { icon: ReactNode, label: string, active: boolean, onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`w-full flex items-center gap-3 px-6 py-4 rounded-xl transition-all duration-300 group border border-transparent ${
-        active
-          ? 'bg-emerald-500/10 text-emerald-400 font-bold border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
-          : 'text-white/40 hover:text-white hover:bg-white/5'
-      }`}
-    >
-      <span className={`${active ? 'text-emerald-400' : 'text-white/20 group-hover:text-white/60'} transition-transform`}>{icon}</span>
-      <span className="text-sm tracking-wide">{label}</span>
-    </button>
-  );
-}
-
-function StatCard({ title, value, icon, trend }: { title: string, value: string, icon: ReactNode, trend: string }) {
-  return (
-    <div className="group relative overflow-hidden rounded-3xl border border-zinc-800/50 bg-[#080808] p-5 shadow-sm transition-all hover:bg-zinc-800/50 sm:flex sm:items-center sm:gap-6 sm:p-6">
-      <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/5 rounded-bl-full pointer-events-none"></div>
-      <div className="mb-4 w-fit rounded-2xl border border-zinc-800/50 bg-zinc-900/50 p-4 transition-transform group-hover:scale-110 sm:mb-0">
-        {icon}
-      </div>
-      <div>
-        <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-[0.2em] mb-1">{title}</p>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline">
-          <h4 className="text-2xl font-bold text-zinc-300">{value}</h4>
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${trend.includes('Toza') || trend.includes('Tasdiqlangan') ? 'text-emerald-500/80 bg-emerald-500/10 border border-emerald-500/10' : 'text-zinc-600 bg-zinc-800/30'}`}>{trend}</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ProgressStep({ icon, label, active, done }: { icon: ReactNode, label: string, active: boolean, done: boolean }) {
-  return (
-    <div className="flex flex-col items-center gap-3 relative">
-      <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-500 border-2 ${
-        done ? 'bg-emerald-600 border-emerald-600 text-black shadow-[0_0_20px_rgba(5,150,105,0.3)]' :
-        active ? 'bg-[#080808] border-emerald-500/50 text-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.1)]' :
-        'bg-[#080808] border-zinc-800/50 text-zinc-800'
-      }`}>
-        {done ? <CheckCircle2 size={24} /> : icon}
-      </div>
-      <p className={`text-[10px] uppercase font-bold tracking-widest ${active || done ? 'text-zinc-400' : 'text-zinc-800'}`}>{label}</p>
-    </div>
-  );
-}
-
-function FileUploadBox({
-  label,
-  fileName,
-  isUploading,
-  onClear,
-  onFileSelect,
-}: {
-  label: string,
-  fileName?: string,
-  isUploading?: boolean,
-  onClear: () => void,
-  onFileSelect: (file: File | null) => void,
-}) {
-  const isUploaded = Boolean(fileName);
-  const inputId = `upload-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
-  const inputRef = useRef<HTMLInputElement | null>(null);
-
-  const openPicker = () => {
-    if (isUploading) {
-      return;
-    }
-
-    inputRef.current?.click();
-  };
-
-  return (
-    <div
-      onClick={openPicker}
-      className={`block border-2 border-dashed rounded-2xl p-5 transition-all hover:bg-zinc-800/20 cursor-pointer group ${
-        isUploaded ? 'border-emerald-600/30 bg-emerald-600/5' : 'border-zinc-800/50'
-      }`}
-    >
-      <input
-        id={inputId}
-        ref={inputRef}
-        type="file"
-        accept="application/pdf,.pdf"
-        className="sr-only"
-        onClick={(event) => {
-          event.currentTarget.value = '';
-        }}
-        onChange={(event) => {
-          onFileSelect(event.target.files?.[0] ?? null);
-        }}
-      />
-
-      <div className="flex items-center justify-between mb-3">
-        <Upload
-          size={20}
-          className={
-            isUploaded ? 'text-emerald-500' : 'text-zinc-700 group-hover:text-emerald-500/60'
-          }
-        />
-        {isUploaded && <CheckCircle2 size={16} className="text-emerald-600" />}
-      </div>
-      <p
-        className={`text-xs font-semibold ${
-          isUploaded ? 'text-emerald-500/80' : 'text-zinc-600 group-hover:text-zinc-400'
-        }`}
-      >
-        {label}
-      </p>
-      <p className="mt-2 text-[11px] text-zinc-500 break-all">
-        {fileName ?? 'PDF tanlash uchun bosing'}
-      </p>
-      <p className="text-[10px] text-zinc-700 mt-2 uppercase tracking-tighter">
-        {isUploading ? 'PDF yuklanmoqda' : isUploaded ? 'PDF selected' : 'PDF required'}
-      </p>
-
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            openPicker();
-          }}
-          disabled={isUploading}
-          className="inline-flex items-center gap-2 rounded-lg border border-emerald-900/40 bg-emerald-950/20 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-emerald-400 hover:bg-emerald-900/30"
-        >
-          {isUploading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCcw size={12} />}
-          {isUploading ? 'Yuklanmoqda...' : isUploaded ? 'Almashtirish' : 'Yuklash'}
-        </button>
-
-        {isUploaded ? (
-          <button
-            type="button"
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onClear();
-            }}
-            disabled={isUploading}
-            className="inline-flex items-center gap-2 rounded-lg border border-red-900/40 bg-red-950/20 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-red-400 hover:bg-red-900/30"
-          >
-            <Trash2 size={12} />
-            O'chirish
-          </button>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function ProfileImageField({
-  name,
-  imageUrl,
-  hasPendingFile,
-  onFileSelect,
-  onReset,
-}: {
-  name: string,
-  imageUrl: string,
-  hasPendingFile: boolean,
-  onFileSelect: (file: File | null) => void,
-  onReset: () => void,
-}) {
-  const inputRef = useRef<HTMLInputElement | null>(null);
-
-  return (
-    <div className="rounded-3xl border border-zinc-800/50 bg-zinc-900/20 p-6">
-      <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-4">
-          <img
-            src={imageUrl || createAvatarPlaceholder(name)}
-            alt={name}
-            className="h-24 w-24 rounded-3xl border border-zinc-800/60 object-cover shadow-2xl"
-          />
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-zinc-600">Profil rasmi</p>
-            <p className="mt-2 text-sm text-zinc-300">Haqiqiy rasm yuklang, saqlaganda backendga yoziladi.</p>
-            <p className="mt-2 text-[11px] text-zinc-500">JPG, PNG, WEBP yoki GIF. Maksimal 3 MB.</p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-3">
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/*"
-            className="sr-only"
-            onClick={(event) => {
-              event.currentTarget.value = '';
-            }}
-            onChange={(event) => onFileSelect(event.target.files?.[0] ?? null)}
-          />
-          <button
-            type="button"
-            onClick={() => inputRef.current?.click()}
-            className="inline-flex items-center gap-2 rounded-2xl border border-emerald-900/40 bg-emerald-950/20 px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-emerald-400 hover:bg-emerald-900/30"
-          >
-            <Upload size={14} />
-            {hasPendingFile ? 'Rasmni almashtirish' : 'Rasm yuklash'}
-          </button>
-          {hasPendingFile ? (
-            <button
-              type="button"
-              onClick={onReset}
-              className="inline-flex items-center gap-2 rounded-2xl border border-red-900/40 bg-red-950/20 px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-red-400 hover:bg-red-900/30"
-            >
-              <Trash2 size={14} />
-              Bekor qilish
-            </button>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function FormInput({
-  label,
-  value,
-  onChange,
-  disabled,
-  placeholder,
-  inputMode,
-  error,
-}: {
-  label: string,
-  value: string,
-  onChange: (value: string) => void,
-  disabled?: boolean,
-  placeholder?: string,
-  inputMode?: InputHTMLAttributes<HTMLInputElement>['inputMode'],
-  error?: string,
-}) {
-  return (
-    <div className="space-y-2">
-      <label className="block text-[10px] font-bold text-zinc-600 uppercase tracking-[0.2em]">{label}</label>
-      <input
-        type="text"
-        value={value}
-        disabled={disabled}
-        placeholder={placeholder}
-        inputMode={inputMode}
-        onChange={(event) => onChange(event.target.value)}
-        className={`w-full bg-zinc-900/40 border rounded-xl px-5 py-4 font-semibold text-zinc-400 focus:ring-1 outline-none transition-all disabled:opacity-50 ${
-          error
-            ? 'border-red-900/60 focus:ring-red-500/30'
-            : 'border-zinc-800/50 focus:ring-emerald-500/30'
-        }`}
-      />
-      {error ? (
-        <p className="text-[11px] text-red-400">{error}</p>
-      ) : placeholder ? (
-        <p className="text-[11px] text-zinc-500">Masalan: {placeholder}</p>
-      ) : null}
-    </div>
-  );
-}
-
-function FormTextarea({ label, value, onChange }: { label: string, value: string, onChange: (value: string) => void }) {
-  return (
-    <div className="space-y-2">
-      <label className="block text-[10px] font-bold text-zinc-600 uppercase tracking-[0.2em]">{label}</label>
-      <textarea
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        rows={4}
-        className="w-full bg-zinc-900/40 border border-zinc-800/50 rounded-xl px-5 py-4 font-semibold text-zinc-400 focus:ring-1 focus:ring-emerald-500/30 outline-none transition-all resize-none"
-      />
-    </div>
-  );
-}
-
-function MeritTest({
-  questions,
-  busy,
-  onComplete,
-}: {
-  questions: MeritQuestion[],
-  busy: boolean,
-  onComplete: (answers: number[]) => void,
-}) {
-  const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [answers, setAnswers] = useState<number[]>([]);
-
-  useEffect(() => {
-    setCurrentQuestion(0);
-    setAnswers([]);
-  }, [questions]);
-
-  if (questions.length === 0) {
-    return (
-      <div className="bg-[#080808] rounded-3xl p-12 border border-zinc-800/50 shadow-2xl max-w-3xl mx-auto text-center">
-        <h3 className="text-2xl font-serif italic text-zinc-300">Merit savollari hozircha mavjud emas</h3>
-      </div>
-    );
-  }
-
-  const handleAnswer = (answerIndex: number) => {
-    if (busy) {
-      return;
-    }
-
-    const nextAnswers = [...answers, answerIndex + 1];
-
-    if (currentQuestion < questions.length - 1) {
-      setAnswers(nextAnswers);
-      setCurrentQuestion((prev) => prev + 1);
-      return;
-    }
-
-    onComplete(nextAnswers);
-  };
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="relative mx-auto max-w-3xl overflow-hidden rounded-3xl border border-zinc-800/50 bg-[#080808] p-6 shadow-2xl sm:p-8 md:p-12"
-    >
-      <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-      <div className="relative z-10 mb-8 flex flex-col gap-3 border-b border-zinc-800/30 pb-6 sm:mb-10 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-          <span className="text-[10px] font-bold text-emerald-600/80 uppercase tracking-widest">Merit Baholash Jarayoni</span>
-        </div>
-        <span className="text-xs font-mono text-zinc-700 tracking-widest uppercase">
-          {busy ? 'Yuborilmoqda...' : `Savol ${currentQuestion + 1} / ${questions.length}`}
-        </span>
-      </div>
-
-      <h3 className="text-2xl font-serif italic text-zinc-300 mb-10 leading-relaxed relative z-10">
-        "{questions[currentQuestion].question}"
-      </h3>
-
-      <div className="grid grid-cols-1 gap-4 relative z-10">
-        {questions[currentQuestion].options.map((option, index) => (
-          <button
-            key={`${questions[currentQuestion].id}-${index}`}
-            onClick={() => handleAnswer(index)}
-            disabled={busy}
-            className="group flex w-full flex-col gap-4 rounded-2xl border border-zinc-800/50 bg-zinc-900/20 p-5 text-left transition-all hover:border-emerald-500/30 hover:bg-emerald-500/5 disabled:opacity-60 sm:flex-row sm:items-center sm:justify-between sm:p-6"
-          >
-            <span className="text-lg text-zinc-500 group-hover:text-zinc-200 transition-colors font-medium">{option}</span>
-            {busy ? <Loader2 size={20} className="animate-spin text-emerald-500" /> : <ArrowRight size={20} className="text-zinc-800 group-hover:text-emerald-500 group-hover:translate-x-2 transition-all" />}
-          </button>
-        ))}
-      </div>
-    </motion.div>
-  );
-}
-
-function RankingRow({ name, score, rank, isYou, blocked }: { name: string, score: number, rank: number, isYou?: boolean, blocked?: boolean }) {
-  return (
-    <div className={`flex flex-col items-start gap-4 rounded-2xl border p-5 transition-all sm:flex-row sm:items-center sm:gap-6 ${
-      isYou ? 'bg-emerald-600/10 border-emerald-500/30 shadow-[0_0_20px_rgba(5,150,105,0.05)]' : 'bg-zinc-900/20 border-zinc-800/50'
-    }`}>
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm ${
-        rank <= 3 ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/20 shadow-[0_0_15px_rgba(5,150,105,0.2)]' : 'bg-zinc-800/50 text-zinc-700'
-      }`}>
-        #{rank}
-      </div>
-      <div className="flex-1">
-        <p className={`font-bold transition-colors ${isYou ? 'text-emerald-400' : 'text-zinc-400'}`}>
-          {name} {isYou && <span className="text-[10px] border border-emerald-500/30 text-emerald-500/80 px-2 py-0.5 rounded ml-2 uppercase tracking-tighter font-bold">Sizning balingiz</span>}
-        </p>
-        <p className="text-[10px] text-zinc-600 font-mono mt-1 uppercase tracking-widest font-medium">Kompetentsiya indeksi: {score}/100</p>
-      </div>
-      <div className="flex w-full items-center justify-between gap-4 sm:w-auto sm:justify-start sm:gap-6">
-        <div className="text-left sm:text-right">
-          <p className={`text-2xl font-light ${isYou ? 'text-emerald-400' : 'text-zinc-500'}`}>{score}</p>
-        </div>
-        {blocked ? (
-          <div className="bg-red-900/20 text-red-600 p-2 rounded-lg border border-red-900/30" title="Blocked by integrity logic">
-            <Lock size={18} />
-          </div>
-        ) : rank <= 3 ? (
-          <div className="bg-emerald-950/30 text-emerald-600 p-2 rounded-lg border border-emerald-900/30" title="Selection authorized">
-            <CheckCircle2 size={18} />
-          </div>
-        ) : null}
-      </div>
     </div>
   );
 }
