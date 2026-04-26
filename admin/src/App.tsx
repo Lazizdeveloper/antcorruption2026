@@ -588,9 +588,21 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-dark-bg flex font-sans text-zinc-300 selection:bg-gold selection:text-black">
+    <div className="min-h-screen overflow-x-hidden bg-dark-bg flex font-sans text-zinc-300 selection:bg-gold selection:text-black">
+      <AnimatePresence>
+        {isSidebarOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsSidebarOpen(false)}
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+          />
+        )}
+      </AnimatePresence>
+
       {/* Sidebar */}
-      <aside className={`fixed inset-y-0 left-0 bg-zinc-950/95 border-r gold-border flex flex-col z-50 transition-all duration-300 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 md:w-64 md:bg-zinc-950/50`}>
+      <aside className={`fixed inset-y-0 left-0 z-50 flex w-[85vw] max-w-[18rem] transform flex-col border-r bg-zinc-950/95 transition-all duration-300 gold-border ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 md:w-64 md:bg-zinc-950/50`}>
         <div className="p-8 pb-4 relative">
           <button 
             onClick={() => setIsSidebarOpen(false)}
@@ -665,7 +677,7 @@ export default function App() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto flex flex-col h-screen">
+      <main className="flex-1 min-w-0 overflow-y-auto flex flex-col h-screen">
         {/* Header */}
         <header className="px-4 sm:px-6 md:px-10 py-4 sm:py-6 flex flex-col md:flex-row justify-between items-start md:items-end border-b gold-border sticky top-0 bg-dark-bg/80 backdrop-blur-xl z-30 gap-4">
           <div className="flex items-center gap-4 w-full md:w-auto">
@@ -714,11 +726,11 @@ export default function App() {
                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    className="absolute right-0 mt-3 w-72 sm:w-80 bg-zinc-900 border border-zinc-800 rounded-lg shadow-2xl z-50 p-4"
+                    className="absolute right-0 mt-3 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-zinc-800 bg-zinc-900 p-4 shadow-2xl z-50"
                   >
-                    <div className="flex justify-between items-center mb-4 border-b border-zinc-800 pb-2">
+                    <div className="mb-4 flex flex-col gap-3 border-b border-zinc-800 pb-2 sm:flex-row sm:items-center sm:justify-between">
                       <h4 className="text-[10px] uppercase tracking-widest font-bold text-gold">Bildirishnomalar</h4>
-                      <div className="flex items-center gap-3">
+                      <div className="flex flex-wrap items-center gap-3">
                         <button
                           onClick={markAllNotificationsAsRead}
                           disabled={unreadNotifications.length === 0}
@@ -735,7 +747,7 @@ export default function App() {
                         </button>
                       </div>
                     </div>
-                    <div className="space-y-3 max-h-64 overflow-y-auto">
+                    <div className="max-h-[min(24rem,calc(100vh-10rem))] space-y-3 overflow-y-auto">
                       {notifications.length > 0 ? notifications.map(n => {
                         const isRead = readNotificationIds.includes(n.id);
 
@@ -823,9 +835,9 @@ export default function App() {
 
                 {/* Table Section */}
                 <div className="glass-panel rounded-lg p-6 flex flex-col border gold-border">
-                  <div className="flex justify-between items-center mb-6 border-b border-zinc-800 pb-4">
+                  <div className="mb-6 flex flex-col gap-3 border-b border-zinc-800 pb-4 sm:flex-row sm:items-center sm:justify-between">
                     <h3 className="text-xl serif-title text-zinc-100">Shubhali harakatlar monitori</h3>
-                    <div className="flex items-center gap-4">
+                    <div className="flex flex-wrap items-center gap-3 sm:gap-4">
                       <button 
                         onClick={handleExport}
                         className="text-[10px] text-gold border border-gold/30 px-3 py-1 rounded hover:bg-gold hover:text-black transition-all"
@@ -837,7 +849,7 @@ export default function App() {
                   </div>
                   
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left text-sm">
+                    <table className="min-w-[640px] w-full text-left text-sm">
                       <thead>
                         <tr className="text-zinc-500 text-[10px] uppercase tracking-[0.2em] border-b border-zinc-800">
                           <th className="pb-4 font-normal">Holat identifikatori</th>
@@ -1347,9 +1359,9 @@ export default function App() {
                 </div>
 
                 <div className="glass-panel rounded-lg border border-zinc-800 overflow-hidden">
-                  <div className="p-4 bg-zinc-900/50 border-b border-zinc-800 flex justify-between items-center">
+                  <div className="flex flex-col gap-3 border-b border-zinc-800 bg-zinc-900/50 p-4 sm:flex-row sm:items-center sm:justify-between">
                     <h4 className="text-[10px] uppercase tracking-widest font-bold text-zinc-400">Backend reportlar</h4>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
                       <span className="text-[9px] text-zinc-600 font-mono">{reports.length} ta yozuv</span>
                       <button
                         onClick={() => void handleExportReports()}
@@ -1393,7 +1405,7 @@ export default function App() {
                 </div>
 
                 <div className="glass-panel rounded-lg border border-zinc-800 overflow-hidden">
-                  <div className="p-4 bg-zinc-900/50 border-b border-zinc-800 flex justify-between items-center">
+                  <div className="flex flex-col gap-3 border-b border-zinc-800 bg-zinc-900/50 p-4 sm:flex-row sm:items-center sm:justify-between">
                     <h4 className="text-[10px] uppercase tracking-widest font-bold text-zinc-400">Tizim harakatlari jurnali</h4>
                     <span className="text-[9px] text-zinc-600 font-mono">Live Logs</span>
                   </div>

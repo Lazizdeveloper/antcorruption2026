@@ -34,7 +34,7 @@ export function CaseDetail({ caseItem, onClose, onReport }: CaseDetailProps) {
       initial={{ opacity: 0, x: 300 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 300 }}
-      className="fixed inset-y-0 right-0 w-full max-w-sm glass-panel z-50 p-8 border-l border-zinc-800 overflow-y-auto shadow-2xl"
+      className="fixed inset-y-0 right-0 z-50 w-full max-w-full overflow-y-auto border-l border-zinc-800 p-5 shadow-2xl glass-panel sm:max-w-sm sm:p-8"
     >
       <div className="flex justify-between items-center mb-8">
         <h2 className="text-xl serif-title text-gold font-bold">Holat tafsilotlari</h2>

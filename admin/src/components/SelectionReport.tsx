@@ -64,7 +64,7 @@ export function SelectionReport({
       initial={{ opacity: 0, scale: 0.9, y: 20 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.9, y: 20 }}
-      className="fixed inset-0 m-auto w-[90%] max-w-[500px] h-fit max-h-[90vh] glass-panel z-50 p-8 border border-zinc-800 overflow-y-auto shadow-[0_0_50px_rgba(0,0,0,0.8)] rounded-2xl flex flex-col"
+      className="fixed inset-0 z-50 m-auto flex h-fit max-h-[90vh] w-[calc(100vw-2rem)] max-w-[500px] flex-col overflow-y-auto rounded-2xl border border-zinc-800 p-5 shadow-[0_0_50px_rgba(0,0,0,0.8)] glass-panel sm:w-[90%] sm:p-8"
     >
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center gap-3">
@@ -94,7 +94,7 @@ export function SelectionReport({
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="bg-zinc-900/50 p-4 rounded-lg border border-zinc-800">
             <p className="text-[10px] uppercase text-zinc-500 tracking-widest mb-1">Nomzod ID</p>
             <p className="text-sm font-mono text-gold">#{result.candidate.id}</p>
@@ -123,19 +123,19 @@ export function SelectionReport({
           </p>
           <div className="space-y-3">
             {hiringAlert && (
-              <div className="flex justify-between items-center text-[11px]">
+              <div className="flex flex-col gap-1 text-[11px] sm:flex-row sm:items-center sm:justify-between">
                 <span className="text-zinc-500">Admin alert sababi:</span>
                 <span className="text-red-400 font-bold text-right">{alertReason}</span>
               </div>
             )}
-            <div className="flex justify-between items-center text-[11px]">
+            <div className="flex flex-col gap-1 text-[11px] sm:flex-row sm:items-center sm:justify-between">
               <span className="text-zinc-500">Qarindoshlik aloqasi:</span>
               <span className={result.candidate.conflictRisk === 'High' ? 'text-red-400 font-bold' : 'text-emerald-400'}>
                 {result.candidate.conflictRisk === 'High' ? 'Aniqlangan' : 'Mavjud emas'}
               </span>
             </div>
             {hiringAlert && (
-              <div className="flex justify-between items-center text-[11px]">
+              <div className="flex flex-col gap-1 text-[11px] sm:flex-row sm:items-center sm:justify-between">
                 <span className="text-zinc-500">AI ball holati:</span>
                 <span className={hiringAlert.riskFlags?.lowAiScore ? 'text-red-400 font-bold' : 'text-emerald-400'}>
                   {hiringAlert.riskFlags?.lowAiScore ? `Qizil (${hiringAlert.aiScore ?? result.candidate.score}/100)` : `Normal (${hiringAlert.aiScore ?? result.candidate.score}/100)`}
@@ -143,7 +143,7 @@ export function SelectionReport({
               </div>
             )}
             {hiringAlert && (
-              <div className="flex justify-between items-center text-[11px]">
+              <div className="flex flex-col gap-1 text-[11px] sm:flex-row sm:items-center sm:justify-between">
                 <span className="text-zinc-500">Audit holati:</span>
                 <span className={hiringAlert.auditStatus === 'CONFLICT' ? 'text-red-400 font-bold' : 'text-emerald-400'}>
                   {hiringAlert.auditStatus ?? (result.candidate.conflictRisk === 'High' ? 'CONFLICT' : 'CLEAN')}

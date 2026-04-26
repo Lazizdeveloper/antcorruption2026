@@ -166,21 +166,13 @@ function createDraft(
   };
 }
 
-function createDocumentDrafts(application: Application | null): DocumentDraftMap {
-  const existingDocuments = Array.isArray(application?.documents) ? application.documents : [];
-
-  return REQUIRED_DOCUMENTS.reduce((accumulator, documentConfig) => {
-    const matchedDocument =
-      existingDocuments.find((document) => document.type === documentConfig.type) ?? null;
-
-    accumulator[documentConfig.type] = matchedDocument;
-    return accumulator;
-  }, {
+function createEmptyDocumentDrafts(): DocumentDraftMap {
+  return {
     diploma: null,
     passport: null,
     certificate: null,
     employment: null,
-  } as DocumentDraftMap);
+  };
 }
 
 function fallbackRanking(application: Application | null): RankingPreviewRow[] {
@@ -213,9 +205,7 @@ export default function App() {
     education: '',
     summary: '',
   });
-  const [documentDrafts, setDocumentDrafts] = useState<DocumentDraftMap>(
-    createDocumentDrafts(null),
-  );
+  const [documentDrafts, setDocumentDrafts] = useState<DocumentDraftMap>(createEmptyDocumentDrafts);
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
   const [pendingProfilePhoto, setPendingProfilePhoto] = useState<File | null>(null);
@@ -263,7 +253,6 @@ export default function App() {
       setApplicationDraft(
         createDraft(safeVacancies, dashboard.application, safeCandidate.phone ?? PHONE_PREFIX),
       );
-      setDocumentDrafts(createDocumentDrafts(dashboard.application));
       setPendingProfilePhoto(null);
       setErrorMessage(null);
     } catch (error) {
@@ -491,6 +480,7 @@ export default function App() {
       setSubmitAttempted(false);
       setIsSubmitConfirmOpen(false);
       setActiveTab('status');
+      setDocumentDrafts(createEmptyDocumentDrafts());
       await loadDashboard(false);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Ariza yuborilmadi');
@@ -641,8 +631,8 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050505] text-zinc-400 font-sans selection:bg-emerald-500/30">
-      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-[#080808] border-b border-zinc-800/50 z-[60] flex items-center justify-between px-6">
+    <div className="min-h-screen overflow-x-hidden bg-[#050505] text-zinc-400 font-sans selection:bg-emerald-500/30">
+      <div className="fixed top-0 left-0 right-0 z-[60] flex h-16 items-center justify-between border-b border-zinc-800/50 bg-[#080808] px-4 md:hidden sm:px-6">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center font-bold text-black">
             <ShieldCheck className="w-5 h-5" />
@@ -669,7 +659,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      <aside className={`fixed left-0 top-0 bottom-0 w-64 bg-[#080808] border-r border-zinc-800/50 z-[52] flex flex-col transition-transform duration-300 md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside className={`fixed left-0 top-0 bottom-0 z-[52] flex w-[85vw] max-w-64 flex-col border-r border-zinc-800/50 bg-[#080808] transition-transform duration-300 md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-8">
           <div className="flex items-center gap-2 mb-12 group cursor-pointer hidden md:flex">
             <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center font-bold text-black shadow-[0_0_15px_rgba(5,150,105,0.3)] group-hover:scale-110 transition-transform">
@@ -715,8 +705,8 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="md:ml-64 p-6 md:p-10 pt-24 md:pt-10 transition-all duration-300">
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
+      <main className="p-4 pt-20 transition-all duration-300 sm:p-6 sm:pt-24 md:ml-64 md:p-10 md:pt-10">
+        <header className="mb-8 flex flex-col gap-4 md:mb-10 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-xs uppercase tracking-[0.3em] text-zinc-600 mb-2 font-bold">
               {activeTab === 'dashboard' && 'Xush kelibsiz'}
@@ -768,8 +758,8 @@ export default function App() {
                 <StatCard title="Xavfsizlik holati" value={candidate.connections.length > 0 ? 'Monitoring' : 'Toza'} icon={<ShieldCheck className="text-emerald-500" />} trend={candidate.connections.length > 0 ? 'Aloqalar tekshirildi' : "Nizolar yo'q"} />
               </div>
 
-              <div className="bg-[#080808] rounded-3xl p-8 border border-zinc-800/50 shadow-lg group">
-                <div className="flex justify-between items-start mb-10">
+              <div className="group rounded-3xl border border-zinc-800/50 bg-[#080808] p-6 shadow-lg sm:p-8">
+                <div className="mb-8 flex flex-col gap-4 md:mb-10 md:flex-row md:items-start md:justify-between">
                   <div>
                     <h2 className="text-xl font-serif italic flex items-center gap-2 text-zinc-200">
                       <Building2 size={22} className="text-emerald-500" />
@@ -804,8 +794,8 @@ export default function App() {
           )}
 
           {activeTab === 'apply' && (
-            <motion.div key="apply" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="max-w-4xl mx-auto">
-              <div className="bg-[#080808] rounded-3xl p-10 border border-zinc-800/50 shadow-2xl relative overflow-hidden">
+            <motion.div key="apply" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="mx-auto w-full max-w-4xl">
+              <div className="relative overflow-hidden rounded-3xl border border-zinc-800/50 bg-[#080808] p-6 shadow-2xl sm:p-8 md:p-10">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-bl-full -z-0"></div>
                 <h2 className="text-2xl font-serif italic mb-8 relative z-10 text-zinc-200">Ariza yuborish</h2>
 
@@ -895,7 +885,7 @@ export default function App() {
 
                   <div className="space-y-6">
                     <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em]">Majburiy hujjatlar</label>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       {REQUIRED_DOCUMENTS.map((document) => (
                         <Fragment key={document.type}>
                           <FileUploadBox
@@ -922,9 +912,9 @@ export default function App() {
                     <FormTextarea label="Qisqa tavsif (ixtiyoriy)" value={applicationDraft.summary} onChange={(value) => setApplicationDraft((prev) => ({ ...prev, summary: value }))} />
                   </div>
 
-                  <div className="p-6 bg-zinc-900/30 rounded-2xl border border-zinc-800/50 transition-all hover:bg-zinc-800/50">
-                    <div className="flex items-center justify-between">
-                      <div className="flex gap-4 items-center">
+                  <div className="rounded-2xl border border-zinc-800/50 bg-zinc-900/30 p-6 transition-all hover:bg-zinc-800/50">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                         <div className="bg-emerald-500/10 p-3 rounded-xl text-emerald-500 border border-emerald-500/20">
                           <EyeOff size={24} />
                         </div>
@@ -967,14 +957,14 @@ export default function App() {
                 <MeritTest questions={meritQuestions} busy={submittingTest} onComplete={handleCompleteMeritTest} />
               ) : (
                 <>
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <div className="bg-[#080808] rounded-3xl border border-zinc-800/50 shadow-sm p-8 h-fit">
-                      <div className="flex justify-between items-center mb-6">
+                  <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+                    <div className="h-fit rounded-3xl border border-zinc-800/50 bg-[#080808] p-6 shadow-sm sm:p-8">
+                      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <h3 className="font-serif italic text-xl text-zinc-200">Sizning profilingiz</h3>
                         <div className="text-[10px] text-zinc-600 font-mono tracking-widest uppercase">ID: {candidate.id}</div>
                       </div>
 
-                      <div className="flex gap-6 pb-6 border-b border-zinc-800/30 mb-6">
+                      <div className="mb-6 flex flex-col gap-4 border-b border-zinc-800/30 pb-6 sm:flex-row sm:items-center sm:gap-6">
                         <img
                           src={
                             profileDraft?.photoUrl ||
@@ -1008,9 +998,9 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="bg-[#0b0b0b] rounded-3xl border border-zinc-800/50 shadow-2xl p-8 relative overflow-hidden group">
+                    <div className="group relative overflow-hidden rounded-3xl border border-zinc-800/50 bg-[#0b0b0b] p-6 shadow-2xl sm:p-8">
                       <div className="absolute top-0 left-0 right-0 h-[2px] bg-emerald-500/10 animate-scanline"></div>
-                      <div className="flex justify-between items-center mb-6 border-b border-zinc-800/30 pb-4">
+                      <div className="mb-6 flex flex-col gap-4 border-b border-zinc-800/30 pb-4 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex items-center gap-2">
                           <EyeOff className="text-emerald-500/70" size={20} />
                           <h3 className="font-serif italic text-xl text-zinc-200">Anonim ko'rinish</h3>
@@ -1022,7 +1012,7 @@ export default function App() {
                       </div>
 
                       <div className="space-y-8">
-                        <div className="flex gap-6 items-center">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
                           <div className="w-24 h-24 bg-zinc-900/50 rounded-2xl flex items-center justify-center backdrop-blur-md border border-zinc-800/50">
                             <Lock size={32} className="text-zinc-800" />
                           </div>
@@ -1041,7 +1031,7 @@ export default function App() {
                           </p>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                           <div className="bg-zinc-900/30 p-4 rounded-xl border border-zinc-800/50">
                             <p className="text-[10px] text-zinc-600 uppercase mb-1 tracking-widest">Moslik</p>
                             <p className="text-2xl font-bold text-zinc-400">{application.matchPercentage ?? '--'}%</p>
@@ -1056,7 +1046,7 @@ export default function App() {
                   </div>
 
                   {(application.status === 'submitted' || application.status === 'blind_review') && (
-                    <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#080808] border border-emerald-500/10 rounded-3xl p-10 shadow-2xl relative overflow-hidden group">
+                    <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="group relative overflow-hidden rounded-3xl border border-emerald-500/10 bg-[#080808] p-6 shadow-2xl sm:p-8 md:p-10">
                       <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:bg-emerald-500/10 transition-all"></div>
                       <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-8">
                         <div className="space-y-4 max-w-xl text-center md:text-left">
@@ -1112,9 +1102,9 @@ export default function App() {
           )}
 
           {activeTab === 'profile' && (
-            <motion.div key="profile" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="max-w-4xl mx-auto">
-              <div className="bg-[#080808] rounded-3xl p-10 border border-zinc-800/50 shadow-2xl">
-                <div className="flex items-center justify-between gap-4 mb-8">
+            <motion.div key="profile" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="mx-auto w-full max-w-4xl">
+              <div className="rounded-3xl border border-zinc-800/50 bg-[#080808] p-6 shadow-2xl sm:p-8 md:p-10">
+                <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h3 className="text-2xl font-serif italic text-zinc-200">Profil ma'lumotlari</h3>
                     <p className="text-sm text-zinc-500 mt-2">Bu bo'lim to'g'ridan-to'g'ri backenddagi candidate profile yozuvini yangilaydi.</p>
@@ -1167,9 +1157,9 @@ export default function App() {
                 initial={{ opacity: 0, y: 20, scale: 0.98 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 20, scale: 0.98 }}
-                className="fixed inset-0 z-[71] flex items-center justify-center px-6"
+                className="fixed inset-0 z-[71] flex items-center justify-center px-4 sm:px-6"
               >
-                <div className="w-full max-w-lg rounded-3xl border border-zinc-800/60 bg-[#080808] p-8 shadow-2xl">
+                <div className="w-full max-w-lg rounded-3xl border border-zinc-800/60 bg-[#080808] p-6 shadow-2xl sm:p-8">
                   <p className="text-[10px] uppercase tracking-[0.3em] text-emerald-500/70 font-bold">
                     Tasdiqlash
                   </p>
@@ -1244,14 +1234,14 @@ function SidebarItem({ icon, label, active, onClick }: { icon: ReactNode, label:
 
 function StatCard({ title, value, icon, trend }: { title: string, value: string, icon: ReactNode, trend: string }) {
   return (
-    <div className="bg-[#080808] p-6 rounded-3xl border border-zinc-800/50 shadow-sm flex items-center gap-6 hover:bg-zinc-800/50 transition-all group overflow-hidden relative">
+    <div className="group relative overflow-hidden rounded-3xl border border-zinc-800/50 bg-[#080808] p-5 shadow-sm transition-all hover:bg-zinc-800/50 sm:flex sm:items-center sm:gap-6 sm:p-6">
       <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/5 rounded-bl-full pointer-events-none"></div>
-      <div className="bg-zinc-900/50 p-4 rounded-2xl transition-transform group-hover:scale-110 border border-zinc-800/50">
+      <div className="mb-4 w-fit rounded-2xl border border-zinc-800/50 bg-zinc-900/50 p-4 transition-transform group-hover:scale-110 sm:mb-0">
         {icon}
       </div>
       <div>
         <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-[0.2em] mb-1">{title}</p>
-        <div className="flex items-baseline gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline">
           <h4 className="text-2xl font-bold text-zinc-300">{value}</h4>
           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${trend.includes('Toza') || trend.includes('Tasdiqlangan') ? 'text-emerald-500/80 bg-emerald-500/10 border border-emerald-500/10' : 'text-zinc-600 bg-zinc-800/30'}`}>{trend}</span>
         </div>
@@ -1344,7 +1334,7 @@ function FileUploadBox({
         {isUploading ? 'PDF yuklanmoqda' : isUploaded ? 'PDF selected' : 'PDF required'}
       </p>
 
-      <div className="mt-4 flex items-center gap-3">
+      <div className="mt-4 flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={(event) => {
@@ -1546,10 +1536,10 @@ function MeritTest({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-[#080808] rounded-3xl p-12 border border-zinc-800/50 shadow-2xl max-w-3xl mx-auto overflow-hidden relative"
+      className="relative mx-auto max-w-3xl overflow-hidden rounded-3xl border border-zinc-800/50 bg-[#080808] p-6 shadow-2xl sm:p-8 md:p-12"
     >
       <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-      <div className="flex justify-between items-center mb-10 border-b border-zinc-800/30 pb-6 relative z-10">
+      <div className="relative z-10 mb-8 flex flex-col gap-3 border-b border-zinc-800/30 pb-6 sm:mb-10 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
           <span className="text-[10px] font-bold text-emerald-600/80 uppercase tracking-widest">Merit Baholash Jarayoni</span>
@@ -1569,7 +1559,7 @@ function MeritTest({
             key={`${questions[currentQuestion].id}-${index}`}
             onClick={() => handleAnswer(index)}
             disabled={busy}
-            className="group w-full text-left p-6 rounded-2xl border border-zinc-800/50 bg-zinc-900/20 hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all flex justify-between items-center disabled:opacity-60"
+            className="group flex w-full flex-col gap-4 rounded-2xl border border-zinc-800/50 bg-zinc-900/20 p-5 text-left transition-all hover:border-emerald-500/30 hover:bg-emerald-500/5 disabled:opacity-60 sm:flex-row sm:items-center sm:justify-between sm:p-6"
           >
             <span className="text-lg text-zinc-500 group-hover:text-zinc-200 transition-colors font-medium">{option}</span>
             {busy ? <Loader2 size={20} className="animate-spin text-emerald-500" /> : <ArrowRight size={20} className="text-zinc-800 group-hover:text-emerald-500 group-hover:translate-x-2 transition-all" />}
@@ -1582,7 +1572,7 @@ function MeritTest({
 
 function RankingRow({ name, score, rank, isYou, blocked }: { name: string, score: number, rank: number, isYou?: boolean, blocked?: boolean }) {
   return (
-    <div className={`flex items-center gap-6 p-5 rounded-2xl border transition-all ${
+    <div className={`flex flex-col items-start gap-4 rounded-2xl border p-5 transition-all sm:flex-row sm:items-center sm:gap-6 ${
       isYou ? 'bg-emerald-600/10 border-emerald-500/30 shadow-[0_0_20px_rgba(5,150,105,0.05)]' : 'bg-zinc-900/20 border-zinc-800/50'
     }`}>
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm ${
@@ -1596,8 +1586,8 @@ function RankingRow({ name, score, rank, isYou, blocked }: { name: string, score
         </p>
         <p className="text-[10px] text-zinc-600 font-mono mt-1 uppercase tracking-widest font-medium">Kompetentsiya indeksi: {score}/100</p>
       </div>
-      <div className="flex items-center gap-6">
-        <div className="text-right">
+      <div className="flex w-full items-center justify-between gap-4 sm:w-auto sm:justify-start sm:gap-6">
+        <div className="text-left sm:text-right">
           <p className={`text-2xl font-light ${isYou ? 'text-emerald-400' : 'text-zinc-500'}`}>{score}</p>
         </div>
         {blocked ? (

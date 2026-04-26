@@ -22,6 +22,8 @@ import {
   Trash2,
   FileText,
   ArrowUpRight,
+  Menu,
+  X,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
@@ -219,6 +221,7 @@ const ProfileImageField = ({
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'applications' | 'shortlisted' | 'hired_staff' | 'profile'>('dashboard');
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [applications, setApplications] = useState<Application[]>([]);
   const [summary, setSummary] = useState<DashboardSummary>({
     totalApplications: 0,
@@ -445,23 +448,63 @@ export default function App() {
   );
 
   return (
-    <div className="flex h-screen w-full bg-slate-950 font-sans text-slate-200 overflow-hidden">
+    <div className="flex min-h-screen w-full bg-slate-950 font-sans text-slate-200 overflow-x-hidden md:h-screen">
+      <div className="fixed inset-x-0 top-0 z-[60] flex h-16 items-center justify-between border-b border-slate-800 bg-slate-950 px-4 md:hidden">
+        <div>
+          <div className="text-lg font-bold tracking-tight text-emerald-400">SHAFFOF-ISH</div>
+          <div className="text-[9px] uppercase tracking-[0.2em] text-slate-500">Nazorat Markazi</div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsMobileSidebarOpen(true)}
+          className="rounded border border-slate-800 p-2 text-slate-300 hover:bg-slate-900"
+        >
+          <Menu size={18} />
+        </button>
+      </div>
+
+      <AnimatePresence>
+        {isMobileSidebarOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsMobileSidebarOpen(false)}
+            className="fixed inset-0 z-[65] bg-black/60 backdrop-blur-sm md:hidden"
+          />
+        )}
+      </AnimatePresence>
+
       {/* Sidebar Navigation */}
-      <aside className="w-60 bg-slate-950 border-r border-slate-800 flex flex-col shrink-0">
-        <div className="p-6 border-b border-slate-800">
-          <div className="text-xl font-bold tracking-tight text-emerald-400">SHAFFOF-ISH</div>
-          <div className="text-[10px] text-slate-500 mt-1 uppercase tracking-widest">Nazorat Markazi v2.1</div>
+      <aside
+        className={cn(
+          'fixed inset-y-0 left-0 z-[70] flex w-[85vw] max-w-60 shrink-0 -translate-x-full flex-col border-r border-slate-800 bg-slate-950 transition-transform duration-300 md:static md:z-auto md:w-60 md:translate-x-0',
+          isMobileSidebarOpen && 'translate-x-0',
+        )}
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-slate-800 p-4 md:p-6">
+          <div>
+            <div className="text-xl font-bold tracking-tight text-emerald-400">SHAFFOF-ISH</div>
+            <div className="mt-1 text-[10px] uppercase tracking-widest text-slate-500">Nazorat Markazi v2.1</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsMobileSidebarOpen(false)}
+            className="rounded border border-slate-800 p-2 text-slate-400 hover:bg-slate-900 md:hidden"
+          >
+            <X size={16} />
+          </button>
         </div>
         
         <nav className="flex-1 py-4 flex flex-col">
-          <SidebarItem icon={LayoutDashboard} label="Boshqaruv Paneli" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
-          <SidebarItem icon={Users} label="Arizalar Monitoringi" active={activeTab === 'applications'} onClick={() => setActiveTab('applications')} />
-          <SidebarItem icon={TrendingUp} label="Suhbat Bosqichi" active={activeTab === 'shortlisted'} onClick={() => setActiveTab('shortlisted')} />
-          <SidebarItem icon={CheckCircle2} label="Ishga qabul qilinganlar" active={activeTab === 'hired_staff'} onClick={() => setActiveTab('hired_staff')} />
-          <SidebarItem icon={UserCircle} label="Profil" active={activeTab === 'profile'} onClick={() => setActiveTab('profile')} />
+          <SidebarItem icon={LayoutDashboard} label="Boshqaruv Paneli" active={activeTab === 'dashboard'} onClick={() => { setActiveTab('dashboard'); setIsMobileSidebarOpen(false); }} />
+          <SidebarItem icon={Users} label="Arizalar Monitoringi" active={activeTab === 'applications'} onClick={() => { setActiveTab('applications'); setIsMobileSidebarOpen(false); }} />
+          <SidebarItem icon={TrendingUp} label="Suhbat Bosqichi" active={activeTab === 'shortlisted'} onClick={() => { setActiveTab('shortlisted'); setIsMobileSidebarOpen(false); }} />
+          <SidebarItem icon={CheckCircle2} label="Ishga qabul qilinganlar" active={activeTab === 'hired_staff'} onClick={() => { setActiveTab('hired_staff'); setIsMobileSidebarOpen(false); }} />
+          <SidebarItem icon={UserCircle} label="Profil" active={activeTab === 'profile'} onClick={() => { setActiveTab('profile'); setIsMobileSidebarOpen(false); }} />
         </nav>
 
-        <div className="p-6 border-t border-slate-800">
+        <div className="border-t border-slate-800 p-4 md:p-6">
           <div className="flex items-center gap-3">
             <img
               src={
@@ -484,11 +527,11 @@ export default function App() {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0">
+      <main className="flex-1 flex min-w-0 flex-col pt-16 md:pt-0">
         {/* Top Header */}
-        <header className="h-14 bg-slate-950 border-b border-slate-800 flex items-center justify-between px-6 shrink-0">
-          <h1 className="text-xs font-bold text-slate-400 uppercase tracking-wide">Tizimdagi arizalar tahlili va korrupsiya monitoringi</h1>
-          <div className="flex items-center gap-4">
+        <header className="flex min-h-14 shrink-0 flex-col gap-3 border-b border-slate-800 bg-slate-950 px-4 py-3 sm:px-6 md:flex-row md:items-center md:justify-between">
+          <h1 className="text-[10px] font-bold uppercase tracking-wide text-slate-400 sm:text-xs">Tizimdagi arizalar tahlili va korrupsiya monitoringi</h1>
+          <div className="flex w-full items-center justify-between gap-4 md:w-auto md:justify-end">
             <div className="flex gap-2">
               <span className="px-3 py-1 bg-blue-950/30 text-blue-500 text-[10px] font-bold rounded border border-blue-900/50">{applications.filter(a => a.status === 'pending').length} YANGI ARIZA</span>
             </div>
@@ -503,9 +546,9 @@ export default function App() {
             </div>
           )}
           {activeTab === 'dashboard' && (
-            <div className="flex-1 overflow-y-auto min-h-0 bg-slate-950 p-4 space-y-4">
+            <div className="flex-1 overflow-y-auto min-h-0 bg-slate-950 p-3 sm:p-4 space-y-4">
               {/* Stats Row */}
-              <section className="grid grid-cols-4 gap-4">
+              <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <StatCard label="Umumiy Arizalar" value={summary.totalApplications} trend={`${summary.pendingCount} ta navbatda`} />
                 <StatCard label="O'rtacha Ball (AI)" value={summary.averageScore.toFixed(1)} subLabel="Max: 100 / Min: 0" />
                 <StatCard label="Ishga Qabul Samaradorligi" value={`${summary.hiredCount}`} color="text-emerald-500" subLabel="Hired nomzodlar" />
@@ -581,13 +624,14 @@ export default function App() {
           {activeTab === 'applications' && (
               <section className="flex-1 px-4 pb-4 overflow-hidden flex flex-col">
                 <div className="bg-slate-900 border border-slate-800 rounded shadow-sm h-full flex flex-col overflow-hidden">
-                  <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950 shrink-0">
+                  <div className="shrink-0 border-b border-slate-800 bg-slate-950 p-4">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                     <h2 className="text-xs font-bold text-slate-400 uppercase tracking-tighter">Barcha arizalar bazasi</h2>
-                    <div className="flex gap-2">
+                    <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap lg:w-auto lg:justify-end">
                       <button
                         onClick={() => void exportReport()}
                         disabled={exportingReport}
-                        className="text-[10px] font-bold border border-emerald-900 px-3 py-1.5 rounded bg-emerald-950/30 text-emerald-400 uppercase outline-none hover:bg-emerald-900/40 disabled:opacity-50"
+                        className="rounded border border-emerald-900 bg-emerald-950/30 px-3 py-1.5 text-[10px] font-bold uppercase text-emerald-400 outline-none hover:bg-emerald-900/40 disabled:opacity-50"
                       >
                         {exportingReport ? 'Eksport...' : 'CSV eksport'}
                       </button>
@@ -598,13 +642,13 @@ export default function App() {
                           placeholder="Nomzod yoki lavozim..." 
                           value={searchTerm}
                           onChange={(e) => setSearchTerm(e.target.value)}
-                          className="text-xs border border-slate-800 bg-slate-950 text-slate-300 pl-8 pr-2 py-1.5 rounded w-64 font-mono outline-none focus:border-emerald-500" 
+                          className="w-full rounded border border-slate-800 bg-slate-950 py-1.5 pl-8 pr-2 font-mono text-xs text-slate-300 outline-none focus:border-emerald-500 sm:w-64" 
                         />
                       </div>
                       <select 
                         value={applicationFilter}
                         onChange={(e) => setApplicationFilter(e.target.value as ApplicationFilter)}
-                        className="text-[10px] font-bold border border-slate-800 px-2 py-1.5 rounded bg-slate-950 text-slate-400 uppercase outline-none focus:border-emerald-500"
+                        className="rounded border border-slate-800 bg-slate-950 px-2 py-1.5 text-[10px] font-bold uppercase text-slate-400 outline-none focus:border-emerald-500"
                       >
                         <option value="all">Barcha arizalar</option>
                         <option value="new_resumes">Yangi rezyumelar</option>
@@ -612,9 +656,10 @@ export default function App() {
                         <option value="hired">Qabul qilinganlar</option>
                       </select>
                     </div>
+                    </div>
                   </div>
                   <div className="flex-1 overflow-auto">
-                    <table className="w-full text-left">
+                    <table className="min-w-[720px] w-full text-left">
                       <thead className="bg-slate-950 text-[10px] text-slate-500 uppercase sticky top-0 z-10 border-b border-slate-800">
                         <tr>
                           <th className="p-3 font-semibold">Nomzod</th>
@@ -671,7 +716,7 @@ export default function App() {
                     <h2 className="text-xs font-bold text-blue-400 uppercase tracking-tighter">Suhbatga chaqirilgan nomzodlar (Interview Stage)</h2>
                   </div>
                   <div className="flex-1 overflow-auto">
-                    <table className="w-full text-left">
+                    <table className="min-w-[720px] w-full text-left">
                       <thead className="bg-slate-950 text-[10px] text-slate-500 uppercase sticky top-0 z-10 border-b border-slate-800">
                         <tr>
                           <th className="p-4 font-semibold">Nomzod</th>
@@ -717,7 +762,7 @@ export default function App() {
                     <h2 className="text-xs font-bold text-emerald-400 uppercase tracking-tighter">Ishga qabul qilingan kadrlar ruyhati</h2>
                   </div>
                   <div className="flex-1 overflow-auto">
-                    <table className="w-full text-left">
+                    <table className="min-w-[720px] w-full text-left">
                       <thead className="bg-slate-950 text-[10px] text-slate-500 uppercase sticky top-0 z-10 border-b border-slate-800">
                         <tr>
                           <th className="p-4 font-semibold">Xodim</th>
@@ -769,7 +814,7 @@ export default function App() {
           {activeTab === 'profile' && profileDraft && (
             <section className="flex-1 px-4 pb-4 overflow-hidden flex flex-col">
               <div className="bg-slate-900 border border-slate-800 rounded shadow-sm h-full flex flex-col overflow-hidden">
-                <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950 shrink-0">
+                <div className="flex flex-col gap-3 border-b border-slate-800 bg-slate-950 p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h2 className="text-xs font-bold text-emerald-400 uppercase tracking-tighter">HR Profil</h2>
                     <p className="text-[10px] text-slate-500 mt-1">Kadrlar bo'limi foydalanuvchi ma'lumotlari</p>
@@ -777,7 +822,7 @@ export default function App() {
                   <button
                     onClick={() => void handleSaveProfile()}
                     disabled={savingProfile}
-                    className="inline-flex items-center gap-2 rounded bg-emerald-600 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-950 hover:bg-emerald-500 disabled:opacity-60"
+                    className="inline-flex w-full items-center justify-center gap-2 rounded bg-emerald-600 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-950 hover:bg-emerald-500 disabled:opacity-60 sm:w-auto"
                   >
                     {savingProfile ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
                     {savingProfile ? 'Saqlanmoqda...' : 'Saqlash'}
@@ -838,15 +883,17 @@ export default function App() {
         </div>
 
         {/* System Footer Bar */}
-        <footer className="h-12 bg-slate-950 border-t border-slate-900 text-[10px] text-slate-500 flex items-center px-4 gap-6 shrink-0 font-mono">
+        <footer className="shrink-0 border-t border-slate-900 bg-slate-950 px-4 py-3 font-mono text-[10px] text-slate-500">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
           <div className="flex items-center gap-2">
             <span className={cn("w-1.5 h-1.5 rounded-full animate-pulse", isOffline ? "bg-red-500" : "bg-emerald-500")}></span> 
             {isOffline ? "TIZIM OFLAYN (ALOQA YO'Q)" : "TIZIM ONLAYN"}
           </div>
           <div className="truncate hidden sm:block">LOG: [{new Date().toLocaleTimeString()}] Tizim tahlillari real-vaqtda yangilanmoqda...</div>
-          <div className="ml-auto flex items-center gap-4">
+          <div className="flex flex-col gap-2 sm:ml-auto sm:flex-row sm:items-center sm:gap-4">
             <div className="flex items-center gap-2"><span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span> BLOKCHEYN SINXRON</div>
             <div className="text-slate-400">SHAFFOFLIK DARAJASI: <span className="text-emerald-400 font-bold">99.8%</span></div>
+          </div>
           </div>
         </footer>
       </main>
@@ -865,9 +912,9 @@ export default function App() {
               key="panel"
               initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed right-0 top-0 h-full w-full max-w-lg bg-slate-900 border-l border-slate-800 z-[70] shadow-2xl flex flex-col font-mono"
+              className="fixed right-0 top-0 z-[70] flex h-full w-full max-w-full flex-col border-l border-slate-800 bg-slate-900 font-mono shadow-2xl sm:max-w-lg"
             >
-               <div className="p-6 border-b border-slate-800 bg-slate-950 text-white flex items-center justify-between">
+               <div className="flex items-start justify-between gap-4 border-b border-slate-800 bg-slate-950 p-4 text-white sm:p-6">
                      <div>
                         <h3 className={cn(selectedApplication.status !== 'hired' && "blur-[10px]", "text-sm font-black uppercase tracking-tighter")}>
                           {selectedApplication.candidateName}
@@ -879,7 +926,7 @@ export default function App() {
                   </button>
                </div>
 
-               <div className="flex-1 overflow-y-auto p-6 space-y-6">
+               <div className="flex-1 overflow-y-auto space-y-6 p-4 sm:p-6">
                   {selectedApplication.conflictDetected && (
                     <div className="p-4 bg-red-950 border border-red-900 text-red-400 rounded-sm">
                        <div className="flex gap-3">
@@ -892,7 +939,7 @@ export default function App() {
                     </div>
                   )}
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="p-4 bg-slate-950 border border-slate-800 rounded">
                        <p className="text-[9px] font-bold text-slate-500 uppercase mb-1">AI Merit Score</p>
                        <p className="text-3xl font-black text-slate-100">{selectedApplication.score}</p>
@@ -908,7 +955,7 @@ export default function App() {
                         <div className="text-[10px] font-bold text-emerald-500 uppercase flex items-center gap-2">
                            <Phone size={12} /> Aloqa Ma'lumotlari (REVEALED)
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                            <div className="p-4 bg-emerald-950/20 border border-emerald-900 rounded flex items-center gap-3">
                               <Phone size={14} className="text-emerald-500" />
                               <div>
@@ -940,7 +987,7 @@ export default function App() {
                           selectedApplication.documents.map((document, index) => (
                             <div
                               key={`${document.type}-${document.name}-${index}`}
-                              className="flex items-center justify-between gap-3 rounded border border-slate-800 bg-slate-950 px-4 py-3"
+                              className="flex flex-col gap-3 rounded border border-slate-800 bg-slate-950 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
                             >
                               <div className="min-w-0">
                                 <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
